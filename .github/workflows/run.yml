@@ -38,8 +38,8 @@ jobs:
       - name: Run Script
         run: python3 ./update_users_and_projects.py
         env:
-          ACCOUNT_HOST: ${{ secrets.ACCOUNT_HOST }}
-          ACCOUNT_KEY: ${{ secrets.ACCOUNT_KEY }}
+          COSMOS_ACCOUNT_HOST: ${{ secrets.COSMOS_ACCOUNT_HOST }}
+          COSMOS_ACCOUNT_KEY: ${{ secrets.COSMOS_ACCOUNT_KEY }}
           COSMOS_DATABASE: ${{ secrets.COSMOS_DATABASE }}
           REMOTE_CMD_HOST: 'gadi'
 
