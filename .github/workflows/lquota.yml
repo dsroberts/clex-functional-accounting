@@ -8,3 +8,4 @@ jobs:
     uses: ./.github/workflows/common.yml
     with:
       script: update_lquota.py
+    secrets: inherit

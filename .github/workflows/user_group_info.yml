@@ -8,3 +8,4 @@ jobs:
     uses: ./.github/workflows/common.yml
     with:
       script: update_users_and_projects.py
+    secrets: inherit
