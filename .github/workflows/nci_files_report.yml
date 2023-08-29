@@ -1,0 +1,13 @@
+name: Gather nci_files_report data
+on:
+  schedule:
+    ### Daily at 10:05pm GMT (8:05am AEST, 9:05am AEDT)
+    - cron: '5 22 * * *'
+  push:
+    branches: main
+  
+jobs:
+  call-common:
+    uses: ./.github/workflows/common.yml
+    with:
+      script: update_nci_files_report.py
