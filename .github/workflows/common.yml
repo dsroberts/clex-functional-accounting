@@ -43,3 +43,5 @@ jobs:
           COSMOS_ACCOUNT_KEY: ${{ secrets.COSMOS_ACCOUNT_KEY }}
           COSMOS_DATABASE: ${{ secrets.COSMOS_DATABASE }}
           REMOTE_CMD_HOST: 'gadi'
+          REMOTE_FS_KEYS: 'scratch,gdata'
+          REMOTE_FS_PATHS: '/scratch,/g/data'
