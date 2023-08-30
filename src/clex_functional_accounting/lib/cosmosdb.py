@@ -12,6 +12,7 @@ from . import config
 HOST: str = config.settings['cosmos_host']
 WRITER_KEY: str = config.settings['key']
 DATABASE_ID:str = config.settings['database_id']
+DRY_RUN: bool = config.settings['dry_run']
 
 class CosmosDBWriter():
     def __init__(self):
@@ -49,6 +50,10 @@ class CosmosDBWriter():
         return self.container_clients[container_id]
     
     def create_item(self, container: str,d: Dict[str,Any]) -> None:
+
+        if DRY_RUN:
+            print(f"Would have created: {d}")
+            return
         
         if container not in self.container_clients:
             raise NotImplementedError("Container client does not exist")
@@ -111,6 +116,10 @@ class CosmosDBWriter():
         
     
     def upsert_item(self,container: str, d: Dict[str,Any]) -> None:
+        
+        if DRY_RUN:
+            print(f"Would have created: {d}")
+            return
 
         if container not in self.container_clients:
             raise NotImplementedError("Container client does not exist")

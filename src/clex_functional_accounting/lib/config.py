@@ -6,5 +6,6 @@ settings = {
     'database_id': os.environ.get('COSMOS_DATABASE', 'Accounting'),
     'remote_cmd_host': os.environ.get('REMOTE_CMD_HOST'),
     'remote_fs_keys': os.environ.get('REMOTE_FS_KEYS').split(','),
-    'remote_fs_paths': os.environ.get('REMOTE_FS_PATHS').split(',')
+    'remote_fs_paths': os.environ.get('REMOTE_FS_PATHS').split(','),
+    'dry_run': os.environ.get('CLEXFA_DRY_RUN',False)
 }

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-from lib import cosmosdb, remote_command, config, group_list
+from ..lib import cosmosdb, remote_command, config, group_list
 
-import logging
 from typing import Dict, Any
 
 #logging.basicConfig(level=logging.INFO)

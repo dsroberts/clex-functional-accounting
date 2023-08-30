@@ -4,7 +4,7 @@ from datetime import datetime
 
 from typing import Dict, List, Union
 
-from lib import cosmosdb, remote_command, config, group_list
+from ..lib import cosmosdb, remote_command, config, group_list
 
 def construct_compute_entry(user: str, val: str, ts: str, proj: str) -> Dict[str,Union[str,float]]:
     return {
