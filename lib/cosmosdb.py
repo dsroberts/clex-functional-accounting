@@ -3,6 +3,7 @@ import azure.cosmos.database as cosmos_database
 import azure.cosmos.container as cosmos_container
 import azure.cosmos.exceptions as cosmos_exceptions
 from azure.cosmos.partition_key import PartitionKey
+from datetime import datetime
 
 from typing import Dict, Any, Optional, List
 
@@ -28,18 +29,21 @@ class CosmosDBWriter():
                 self.db_clients[db_id] = self.client.get_database_client(db_id)
         return self.db_clients[db_id]
         
-    def get_container(self,container_id: str,db_id: Optional[str]=None,partition_key: Optional[str]=None) -> cosmos_container.ContainerProxy:
+    def get_container(self,container_id: str,db_id: Optional[str]=None,partition_key: str="PartitionKey",quarterly: Optional[bool]=False) -> cosmos_container.ContainerProxy:
         if container_id not in self.container_clients:
             if not db_id:
                 raise KeyError(f"If {container_id} does not already have a client, {db_id} must be provided")
-            if not partition_key:
-                raise KeyError(f"If {container_id} does not already have a client, {partition_key} must be provided")
             db = self.get_db(db_id)
+            if quarterly:
+                d = datetime.now()
+                container_name=f"{container_id}_{d.year}.q{(d.month-1)//3+1}"
+            else:
+                container_name=container_id
             try:
-                self.container_clients[container_id] = db.create_container(id=container_id,partition_key=PartitionKey(path='/'+partition_key))
+                self.container_clients[container_id] = db.create_container(id=container_name,partition_key=PartitionKey(path='/'+partition_key))
                 self.partition_keys[container_id] = partition_key
             except cosmos_exceptions.CosmosResourceExistsError:
-                self.container_clients[container_id] = db.get_container_client(container_id)
+                self.container_clients[container_id] = db.get_container_client(container_name)
                 self.partition_keys[container_id] = self.container_clients[container_id].read()['partitionKey']['paths'][0].lstrip('/')
             
         return self.container_clients[container_id]
@@ -72,6 +76,8 @@ class CosmosDBWriter():
         
             return [ k for k in all_items if k[field] == item ]
 
+        ### This code is for the case where the above assertion turns out
+        ### to be false
 #        if container not in self.container_clients:
 #            raise NotImplementedError("Container client does not exist")
 #        

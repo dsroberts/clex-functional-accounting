@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from lib import cosmosdb, remote_command, config
+from lib import cosmosdb, remote_command, config, group_list
 
 import logging
 from typing import Dict, Any
@@ -39,11 +39,11 @@ def main():
 
     ### First, return a list of all of the groups we're a part of, and create our entry
     ### In the user database
-    my_groups = remote_command.run_remote_cmd(["id","-Gn"])[0].split()
+    my_groups = group_list.get_group_list()
     
     writer = cosmosdb.CosmosDBWriter()
-    _ = writer.get_container("Group","Accounting","PartitionKey")
-    _ = writer.get_container("User","Accounting","PartitionKey")
+    _ = writer.get_container("groups","Accounting")
+    _ = writer.get_container("users","Accounting")
     #maybe_update_entry("User",config.settings['remote_cmd_host'],writer,my_user_entry)
 
     all_seen_users=set()
@@ -60,7 +60,7 @@ def main():
                       'PartitionKey': config.settings['remote_cmd_host'],
                       'users': group_users
                     }
-        maybe_update_entry("Group",writer,group_entry)
+        maybe_update_entry("groups",writer,group_entry)
 
 
     ### Now get all users in all of these groups - batch the command to avoid hitting rate limits at either end
@@ -79,7 +79,7 @@ def main():
                          'PartitionKey': config.settings['remote_cmd_host'],
                          'groups': groups
                         }
-            maybe_update_entry("User",writer,user_entry)
+            maybe_update_entry("users",writer,user_entry)
 
 
 
