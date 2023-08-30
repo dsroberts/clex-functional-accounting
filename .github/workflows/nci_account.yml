@@ -1,4 +1,4 @@
-name: Gather nci_files_report data
+name: Gather nci_account data
 on:
   schedule:
     - cron: '25 */6 * * *'
