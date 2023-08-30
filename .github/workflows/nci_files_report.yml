@@ -8,5 +8,5 @@ jobs:
   call-common:
     uses: ./.github/workflows/common.yml
     with:
-      script: update_nci_files_report.py
+      script: update_nci_files_report
     secrets: inherit

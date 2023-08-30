@@ -9,5 +9,5 @@ jobs:
   call-common:
     uses: ./.github/workflows/common.yml
     with:
-      script: update_users_and_projects.py
+      script: update_users_and_projects
     secrets: inherit
