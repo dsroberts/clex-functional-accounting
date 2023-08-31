@@ -1,0 +1,4 @@
+azure-core
+azure-cosmos
+azure-functions
+Flask

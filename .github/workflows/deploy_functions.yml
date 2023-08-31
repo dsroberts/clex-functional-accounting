@@ -22,6 +22,7 @@ jobs:
           funcdeps:
             - src/clex_functional_accounting/lib/*
             - src/clex_functional_accounting/function/*
+            - .github/workflows/deploy_functions.yml
 
     - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
       uses: actions/setup-python@v4
