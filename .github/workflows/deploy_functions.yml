@@ -20,8 +20,8 @@ jobs:
       with:
         files_yaml: |
           funcdeps:
-            - src/clex_functional_account/lib/*
-            - src/clex_functional_account/function/*
+            - src/clex_functional_accounting/lib/*
+            - src/clex_functional_accounting/function/*
 
     - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
       uses: actions/setup-python@v4
