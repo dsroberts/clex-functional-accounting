@@ -8,3 +8,8 @@ build
 ### Stuff made by pbr
 AUTHORS
 ChangeLog
+### VScode
+.vscode
+### Azure functions stuff
+.python_packages
+local.settings.json

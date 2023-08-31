@@ -5,7 +5,7 @@ on:
 env:
   AZURE_FUNCTIONAPP_NAME: 'clex-cms-accounting'
   AZURE_FUNCTIONAPP_PACKAGE_PATH: './src/clex_functional_accounting/function'
-  PYTHON_VERSION: '3.10'
+  PYTHON_VERSION: '3.9'
 
 jobs:
   run:
