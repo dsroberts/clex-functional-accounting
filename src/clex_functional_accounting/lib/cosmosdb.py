@@ -5,7 +5,7 @@ import azure.cosmos.exceptions as cosmos_exceptions
 from azure.cosmos.partition_key import PartitionKey
 from datetime import datetime
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 
 from . import config
 
@@ -26,7 +26,7 @@ class CosmosDBWriter():
         if db_id not in self.db_clients:
             try:
                 self.db_clients[db_id] = self.client.create_database(id=db_id)
-            except cosmos_exceptions.CosmosResourceExistsError:
+            except (cosmos_exceptions.CosmosResourceExistsError,cosmos_exceptions.CosmosHttpResponseError):
                 self.db_clients[db_id] = self.client.get_database_client(db_id)
         return self.db_clients[db_id]
         
@@ -43,7 +43,7 @@ class CosmosDBWriter():
             try:
                 self.container_clients[container_id] = db.create_container(id=container_name,partition_key=PartitionKey(path='/'+partition_key))
                 self.partition_keys[container_id] = partition_key
-            except cosmos_exceptions.CosmosResourceExistsError:
+            except (cosmos_exceptions.CosmosResourceExistsError,cosmos_exceptions.CosmosHttpResponseError):
                 self.container_clients[container_id] = db.get_container_client(container_name)
                 self.partition_keys[container_id] = self.container_clients[container_id].read()['partitionKey']['paths'][0].lstrip('/')
             
@@ -66,42 +66,40 @@ class CosmosDBWriter():
 
         container_client.create_item(body=d)
 
-    def read_items(self, container: str, item: Any, field: Optional[str] =  None) -> List[Dict[str,Any]]:
+    def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
 
         ### 999 times out of 1000 its going to be faster to just grab everything and do the search within
         ### python itself. These databases are so small it just doesn't matter
-        all_items=self.read_all_items(container)
+        if container not in self.container_clients:
+                raise NotImplementedError("Container client does not exist")
+        if once_off:
+            if field is not None:
+                raise KeyError("When 'once_off' is true the field can only be id")
+            if partition_key_val is None:
+                raise KeyError("When 'once_off' is true, partition_key_val must be provided")
+        
+            container_client=self.get_container(container)
 
-        if not field:
+            try:
+                return [ container_client.read_item(item=item,partition_key=partition_key_val), ]
+            except cosmos_exceptions.CosmosResourceNotFoundError:
+                return []
+
+        else:
+
+            all_items=self.read_all_items(container)
+        
+            if field:
+                if field not in all_items[0]:
+                   raise KeyError(f"{container} entries do not contain {field}")
+
+                return [ k for k in all_items if k[field] == item ]
+
             return [ k for k in all_items if k['id'] == item ]
-        
-        if field:
-            if field not in all_items[0]:
-                raise KeyError(f"{container} entries do not contain {field}")
-        
-            return [ k for k in all_items if k[field] == item ]
 
         ### This code is for the case where the above assertion turns out
         ### to be false
-#        if container not in self.container_clients:
-#            raise NotImplementedError("Container client does not exist")
-#        
-#        if not partition_key_val:
-#            raise KeyError("Partition Key value must be provided")
-#        
-#        container_client=self.get_container(container)
-#        partition_key=self.partition_keys[container]
-#
-#        try:
-#            if not field or field == "id":
-#                response=[ container_client.read_item(item=item,partition_key=partition_key_val), ]
-#            else:
-#                response = list(container_client.query_items(query=f"SELECT * FROM r WHERE r.{partition_key}='{partition_key_val}' AND r.{field}=@val",parameters=[{"name":"@val","value":item}]))
-#        except cosmos_exceptions.CosmosResourceNotFoundError:
-#            ### Return an empty list if we didn't find anything
-#            return []
-#
-#        return response
+
 
     def read_all_items(self,container: str) -> List[Dict[str,Any]]:
 
@@ -131,23 +129,42 @@ class CosmosDBWriter():
             raise KeyError(f"Partition Key ({pk}) not present in object to create")
 
         container_client.upsert_item(body=d)
-        
 
-    
+    def query(self, container: str, fields: Optional[Union[str,List[str]]]=None,where: Optional[List[str]] = None,order: Optional[str] = None,offset: Optional[int] = None,limit: Optional[int] = None):
 
-        
+        if container not in self.container_clients:
+            raise NotImplementedError("Container client does not exist")
 
-        
-        
+        q = "SELECT"
+        if not fields:
+            q+=" * "
+        elif isinstance(fields,list):
+            q+=f" VALUE {{ {', '.join([ i+':  c.'+i for i in fields ])} }}"
+        elif isinstance(fields,str):
+            q+= f" VALUE {{ {fields}: c.{fields} }}"
+        q += " FROM c"
 
+        if where:
+            if isinstance(where,List):
+                q+=f" WHERE c.{' AND c.'.join(i for i in where)}"
+            elif isinstance(where,str):
+                q+=f" WHERE c.{i}"
 
+        if order:
+            q+=f" ORDER BY c.{order}"
 
+        if offset:
+            q+=f" OFFSET {offset}"
+        elif limit:
+            q+=f" OFFSET 0"
 
+        if limit:
+            q+=f" LIMIT {limit}"
+        elif offset:
+            q+=f" LIMIT 10000"
 
-
-
-        
-        
-        
-
-        
+        container_client = self.get_container(container)
+        try:
+            return list(container_client.query_items(q))
+        except cosmos_exceptions.CosmosHttpResponseError:
+            return []
