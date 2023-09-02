@@ -61,7 +61,7 @@ class CosmosDBWriter():
         if container not in self.container_clients:
             raise NotImplementedError("Container client does not exist")
         
-        container_client=self.get_container(container)
+        container_client = await self.get_container(container)
         pk=self.partition_keys[container]
 
         if pk not in d:
@@ -81,7 +81,7 @@ class CosmosDBWriter():
             if partition_key_val is None:
                 raise KeyError("When 'once_off' is true, partition_key_val must be provided")
         
-            container_client= await self.get_container(container)
+            container_client = await self.get_container(container)
 
             try:
                 return [ await container_client.read_item(item=item,partition_key=partition_key_val), ]
