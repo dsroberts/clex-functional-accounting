@@ -2,3 +2,5 @@ azure-core
 azure-cosmos
 azure-functions
 Flask
+asyncio
+aiohttp

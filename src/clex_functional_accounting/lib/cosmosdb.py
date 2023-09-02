@@ -1,9 +1,8 @@
-import azure.cosmos.cosmos_client as cosmos_client
-import azure.cosmos.database as cosmos_database
-import azure.cosmos.container as cosmos_container
+import azure.cosmos.aio as cosmos_aio
 import azure.cosmos.exceptions as cosmos_exceptions
 from azure.cosmos.partition_key import PartitionKey
 from datetime import datetime
+import asyncio
 
 from typing import Dict, Any, Optional, List, Union
 
@@ -16,40 +15,44 @@ DRY_RUN: bool = config.settings['dry_run']
 
 class CosmosDBWriter():
     def __init__(self):
-        self.client = cosmos_client.CosmosClient(HOST, {'masterKey':WRITER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
+        self.client = cosmos_aio.CosmosClient(HOST, {'masterKey':WRITER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
         self.db_clients = {}
         self.container_clients = {}
         self.partition_keys = {}
         self.client_caches = {}
+    
+    async def close(self):
+        await self.client.close()
 
-    def get_db(self,db_id: str) -> cosmos_database.DatabaseProxy:
+    async def get_db(self,db_id: str) -> cosmos_aio.DatabaseProxy:
         if db_id not in self.db_clients:
             try:
-                self.db_clients[db_id] = self.client.create_database(id=db_id)
+                self.db_clients[db_id] = await self.client.create_database(id=db_id)
             except (cosmos_exceptions.CosmosResourceExistsError,cosmos_exceptions.CosmosHttpResponseError):
                 self.db_clients[db_id] = self.client.get_database_client(db_id)
         return self.db_clients[db_id]
         
-    def get_container(self,container_id: str,db_id: Optional[str]=None,partition_key: str="PartitionKey",quarterly: Optional[bool]=False) -> cosmos_container.ContainerProxy:
+    async def get_container(self,container_id: str,db_id: Optional[str]=None,partition_key: str="PartitionKey",quarterly: Optional[bool]=False) -> cosmos_aio.ContainerProxy:
         if container_id not in self.container_clients:
             if not db_id:
                 raise KeyError(f"If {container_id} does not already have a client, {db_id} must be provided")
-            db = self.get_db(db_id)
+            db = await self.get_db(db_id)
             if quarterly:
                 d = datetime.now()
                 container_name=f"{container_id}_{d.year}.q{(d.month-1)//3+1}"
             else:
                 container_name=container_id
             try:
-                self.container_clients[container_id] = db.create_container(id=container_name,partition_key=PartitionKey(path='/'+partition_key))
+                self.container_clients[container_id] = await db.create_container(id=container_name,partition_key=PartitionKey(path='/'+partition_key))
                 self.partition_keys[container_id] = partition_key
             except (cosmos_exceptions.CosmosResourceExistsError,cosmos_exceptions.CosmosHttpResponseError):
                 self.container_clients[container_id] = db.get_container_client(container_name)
-                self.partition_keys[container_id] = self.container_clients[container_id].read()['partitionKey']['paths'][0].lstrip('/')
+                out_data = await self.container_clients[container_id].read()
+                self.partition_keys[container_id] = out_data['partitionKey']['paths'][0].lstrip('/')
             
         return self.container_clients[container_id]
     
-    def create_item(self, container: str,d: Dict[str,Any]) -> None:
+    async def create_item(self, container: str,d: Dict[str,Any]) -> None:
 
         if DRY_RUN:
             print(f"Would have created: {d}")
@@ -64,9 +67,9 @@ class CosmosDBWriter():
         if pk not in d:
             raise KeyError(f"Partition Key ({pk}) not present in object to create")
 
-        container_client.create_item(body=d)
+        await container_client.create_item(body=d)
 
-    def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
+    async def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
 
         ### 999 times out of 1000 its going to be faster to just grab everything and do the search within
         ### python itself. These databases are so small it just doesn't matter
@@ -78,16 +81,16 @@ class CosmosDBWriter():
             if partition_key_val is None:
                 raise KeyError("When 'once_off' is true, partition_key_val must be provided")
         
-            container_client=self.get_container(container)
+            container_client= await self.get_container(container)
 
             try:
-                return [ container_client.read_item(item=item,partition_key=partition_key_val), ]
+                return [ await container_client.read_item(item=item,partition_key=partition_key_val), ]
             except cosmos_exceptions.CosmosResourceNotFoundError:
                 return []
 
         else:
 
-            all_items=self.read_all_items(container)
+            all_items=await self.read_all_items(container)
         
             if field:
                 if field not in all_items[0]:
@@ -101,19 +104,19 @@ class CosmosDBWriter():
         ### to be false
 
 
-    def read_all_items(self,container: str) -> List[Dict[str,Any]]:
+    async def read_all_items(self,container: str) -> List[Dict[str,Any]]:
 
         if container not in self.client_caches:
 
             if container not in self.container_clients:
                 raise NotImplementedError("Container client does not exist")
         
-            self.client_caches[container] = list(self.container_clients[container].read_all_items())
+            self.client_caches[container] = [ item async for item in self.container_clients[container].read_all_items() ]
         
         return self.client_caches[container]
         
     
-    def upsert_item(self,container: str, d: Dict[str,Any]) -> None:
+    async def upsert_item(self,container: str, d: Dict[str,Any]) -> None:
         
         if DRY_RUN:
             print(f"Would have created: {d}")
@@ -128,9 +131,9 @@ class CosmosDBWriter():
         if pk not in d:
             raise KeyError(f"Partition Key ({pk}) not present in object to create")
 
-        container_client.upsert_item(body=d)
+        await container_client.upsert_item(body=d)
 
-    def query(self, container: str, fields: Optional[Union[str,List[str]]]=None,where: Optional[List[str]] = None,order: Optional[str] = None,offset: Optional[int] = None,limit: Optional[int] = None):
+    async def query(self, container: str, fields: Optional[Union[str,List[str]]]=None,where: Optional[List[str]] = None,order: Optional[str] = None,offset: Optional[int] = None,limit: Optional[int] = None):
 
         if container not in self.container_clients:
             raise NotImplementedError("Container client does not exist")
@@ -148,7 +151,7 @@ class CosmosDBWriter():
             if isinstance(where,List):
                 q+=f" WHERE c.{' AND c.'.join(i for i in where)}"
             elif isinstance(where,str):
-                q+=f" WHERE c.{i}"
+                q+=f" WHERE c.{where}"
 
         if order:
             q+=f" ORDER BY c.{order}"
@@ -163,8 +166,8 @@ class CosmosDBWriter():
         elif offset:
             q+=f" LIMIT 10000"
 
-        container_client = self.get_container(container)
+        container_client = await self.get_container(container)
         try:
-            return list(container_client.query_items(q))
+            return [ item async for item in container_client.query_items(q)]
         except cosmos_exceptions.CosmosHttpResponseError:
             return []

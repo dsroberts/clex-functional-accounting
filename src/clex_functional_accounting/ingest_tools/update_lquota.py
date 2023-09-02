@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 from ..lib import cosmosdb, remote_command, config, group_list
 
+import asyncio
 import uuid
 from datetime import datetime
 
-def main():
+async def main():
     
-    lquota_out=remote_command.run_remote_cmd(["lquota","-q","--no-pretty-print"])
     writer = cosmosdb.CosmosDBWriter()
-    _ = writer.get_container("storage","Accounting","project",quarterly=True)
+    get_future = writer.get_container("storage","Accounting","project",quarterly=True)
+    lquota_out=remote_command.run_remote_cmd(["lquota","-q","--no-pretty-print"])
+    _ = await get_future
     
     ts = str(datetime.now())
     field_names=[ 'project','fs','usage','quota','limit','iusage','iquota','ilimit' ]
 
     my_groups = group_list.get_group_list()
+    futures=[]
 
     for line in lquota_out:
         fields=line.split()
@@ -32,7 +35,13 @@ def main():
         entry['system'] = config.settings['remote_cmd_host']
 
         if entry['project'] in my_groups:
-            writer.create_item("storage",entry)
+            futures.append(writer.create_item("storage",entry))
+
+    await asyncio.gather(*futures)
+    await writer.close()
+
+def async_main():
+    asyncio.run(main())
 
 if __name__ == "__main__":
-    main()
+    async_main()

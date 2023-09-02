@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import uuid
+import asyncio
 from datetime import datetime
 
 from typing import Dict, List, Union
@@ -67,8 +68,11 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
     return out
         
 
-def main():
+async def main():
 
+    writer = cosmosdb.CosmosDBWriter()
+    compute_future = writer.get_container('compute',"Accounting","project",quarterly=True)
+    storage_future = writer.get_container('storage',"Accounting","project",quarterly=True)
     ### Placeholder for grabbing list of groups
     ts = str(datetime.now())
     my_groups = group_list.get_group_list()
@@ -87,17 +91,22 @@ def main():
     ### Get the last entry
     entry_list.extend(parse_block(nci_account_out[block_start:],ts))
     
-    writer = cosmosdb.CosmosDBWriter()
-    _ = writer.get_container('compute',"Accounting","project",quarterly=True)
-    _ = writer.get_container('storage',"Accounting","project",quarterly=True)
+    await asyncio.gather(compute_future,storage_future)
 
+    futures = []
     for entry in entry_list:
         ### In this case we can have both 'storage' and 'compute' entries
         ### Figure out which and create the item in the right database
             if 'fs' in entry:
-                writer.create_item('storage',entry)
+                futures.append(writer.create_item('storage',entry))
             else:
-                writer.create_item('compute',entry)
+                futures.append(writer.create_item('compute',entry))
+    
+    await asyncio.gather(*futures)
+    await writer.close()
+
+def async_main():
+    asyncio.run(main())
 
 if __name__ == "__main__":
-    main()
+    async_main()
