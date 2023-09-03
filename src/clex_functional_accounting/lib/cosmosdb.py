@@ -125,7 +125,7 @@ class CosmosDBWriter():
         if container not in self.container_clients:
             raise NotImplementedError("Container client does not exist")
 
-        container_client=self.get_container(container)
+        container_client = await self.get_container(container)
         pk=self.partition_keys[container]
 
         if pk not in d:
