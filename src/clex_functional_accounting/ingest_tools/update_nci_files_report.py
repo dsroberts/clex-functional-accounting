@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 import json
 import uuid
-import asyncio
 from datetime import datetime
 
 from ..lib import cosmosdb, remote_command, config, group_list
 
-async def main():
+def main():
 
     ### Grab the list of groups we care about out of the database
     writer = cosmosdb.CosmosDBWriter()
-    groups_future = writer.get_container("groups","Accounting")
-    users_future = writer.get_container("users","Accounting")
-    files_report_future = writer.get_container("files_report","Accounting",quarterly=True)
-    await asyncio.gather(groups_future,users_future)
+    _ = writer.get_container("groups","Accounting")
+    _ = writer.get_container("users","Accounting")
+    _ = writer.get_container("files_report","Accounting",quarterly=True)
+    #await asyncio.gather(groups_future,users_future)
     
-    all_groups_future = writer.read_all_items("groups")
-    all_users_future = writer.read_all_items("users")
+    all_groups_d = writer.read_all_items("groups")
+    all_users_d = writer.read_all_items("users")
 
     my_groups = group_list.get_group_list()
 
@@ -27,14 +26,14 @@ async def main():
     unknown_groups=set()
     deferred_entries=[]
 
-    all_groups_d, all_users_d = await asyncio.gather(all_groups_future,all_users_future)
+    #all_groups_d, all_users_d = await asyncio.gather(all_groups_future,all_users_future)
     all_groups = dict([ (i['gid'],i['id'] ) for i in all_groups_d ])
     ### Use this to key off of username rather than uid on db insert
     all_users = dict([(i['uid'],i['id']) for i in all_users_d ])
 
-    futures=[]
+    #futures=[]
 
-    _ = await files_report_future
+    #_ = await files_report_future
 
     for i,fs in enumerate(config.settings['remote_fs_keys']):
         fs_path=config.settings['remote_fs_paths'][i]
@@ -101,7 +100,8 @@ async def main():
                     if defer_entry:
                         deferred_entries.append(db_entry)
                     else:
-                        futures.append(writer.create_item("files_report",db_entry))
+                        #futures.append(writer.create_item("files_report",db_entry))
+                        writer.create_item("files_report",db_entry)
         
         if unknown_users:
             missing_user_data=remote_command.run_remote_cmd([f'for i in {" ".join([ str(i) for i in unknown_users ])}; do getent passwd $i; id -Gn $i; sleep 0.01; done'])
@@ -116,7 +116,8 @@ async def main():
                              'PartitionKey': config.settings['remote_cmd_host'],
                              'groups': groups
                             }
-                futures.append(writer.create_item('users',user_entry))
+                #futures.append(writer.create_item('users',user_entry))
+                writer.create_item('users',user_entry)
                 print(f"User entry for {user_entry['id']} created")
                 all_users[user_entry['uid']]=user_entry['id']
 
@@ -133,7 +134,8 @@ async def main():
                                   'PartitionKey': config.settings['remote_cmd_host'],
                                   'users': group_users
                                 }
-                    futures.append(writer.create_item('groups',group_entry))
+                    #futures.append(writer.create_item('groups',group_entry))
+                    writer.create_item('groups',group_entry)
                     ### unknown_groups can contain either gids or group names
                     ### Fortunately, gids are always first, so we can discard the
                     ### group name if it exists to prevent multiple entries
@@ -161,14 +163,16 @@ async def main():
                 pass
 
             entry['PartitionKey'] = f'{entry["user"]}_{entry["ownership"]}_{entry["location"]}'
-            futures.append(writer.create_item("files_report",db_entry))
+            #futures.append(writer.create_item("files_report",db_entry))
+            writer.create_item("files_report",db_entry)
     
-    await asyncio.gather(*futures)
-    await writer.close()
+    #await asyncio.gather(*futures)
+    #await writer.close()
 
 
-def async_main():
-    asyncio.run(main())
+#def async_main():
+#    asyncio.run(main())
 
 if __name__ == "__main__":
-    async_main()
+    #async_main()
+    main()

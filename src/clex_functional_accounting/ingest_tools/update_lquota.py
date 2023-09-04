@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from ..lib import cosmosdb, remote_command, config, group_list
+from ..lib import remote_command, config, group_list
+from ..lib.cosmosdb import aio as cosmosdb
 
 import asyncio
 import uuid
