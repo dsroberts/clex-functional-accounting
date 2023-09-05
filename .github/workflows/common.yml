@@ -45,3 +45,5 @@ jobs:
           REMOTE_CMD_HOST: 'gadi'
           REMOTE_FS_KEYS: 'scratch,gdata'
           REMOTE_FS_PATHS: '/scratch,/g/data'
+          BLOB_ACCOUNT_HOST: ${{ secrets.BLOB_ACCOUNT_HOST }}
+          BLOB_ACCOUNT_KEY: ${{ secrets.BLOB_ACCOUNT_KEY }}
