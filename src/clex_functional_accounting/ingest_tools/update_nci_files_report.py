@@ -3,19 +3,20 @@ import json
 import uuid
 from datetime import datetime
 
-from ..lib import cosmosdb, remote_command, config, group_list
+from ..lib import cosmosdb, remote_command, config, group_list, blob
 
 def main():
 
     ### Grab the list of groups we care about out of the database
+    blob_writer=blob.BlobWriter()
     writer = cosmosdb.CosmosDBWriter()
-    _ = writer.get_container("groups","Accounting")
-    _ = writer.get_container("users","Accounting")
+    #_ = writer.get_container("groups","Accounting")
+    #_ = writer.get_container("users","Accounting")
     _ = writer.get_container("files_report","Accounting",quarterly=True)
     #await asyncio.gather(groups_future,users_future)
     
-    all_groups_d = writer.read_all_items("groups")
-    all_users_d = writer.read_all_items("users")
+    all_groups_d = blob_writer.read_item(blob.CONTAINER,'groups')
+    all_users_d = blob_writer.read_item(blob.CONTAINER,'users')
 
     my_groups = group_list.get_group_list()
 
@@ -27,9 +28,9 @@ def main():
     deferred_entries=[]
 
     #all_groups_d, all_users_d = await asyncio.gather(all_groups_future,all_users_future)
-    all_groups = dict([ (i['gid'],i['id'] ) for i in all_groups_d ])
+    all_groups = dict([ (v['gid'],k ) for k,v in all_groups_d.items() ])
     ### Use this to key off of username rather than uid on db insert
-    all_users = dict([(i['uid'],i['id']) for i in all_users_d ])
+    all_users = dict([(v['uid'],k) for k,v in all_users_d.items() ])
 
     #futures=[]
 
@@ -93,8 +94,7 @@ def main():
                                 'location':location,
                                 'size':size,
                                 'inodes':inodes,
-                                'system':config.settings['remote_cmd_host'],
-                                'PartitionKey':f'{user}_{ownership}_{location}'
+                                'system':config.settings['remote_cmd_host']
                               }
 
                     if defer_entry:
@@ -108,18 +108,16 @@ def main():
             for passwd,idgn in zip(missing_user_data[0::2],missing_user_data[1::2]):
                 pw=passwd.split(':')
                 groups=idgn.split()
-                user_entry={ 'id': pw[0],
-                             'uid': int(pw[2]),
+                all_users_d[pw[0]]={ 'uid': int(pw[2]),
                              'gid': int(pw[3]),
                              'pw_name': pw[4],
                              'home': pw[5],
-                             'PartitionKey': config.settings['remote_cmd_host'],
                              'groups': groups
                             }
                 #futures.append(writer.create_item('users',user_entry))
-                writer.create_item('users',user_entry)
-                print(f"User entry for {user_entry['id']} created")
-                all_users[user_entry['uid']]=user_entry['id']
+                print(f"User entry for {pw[0]} created")
+                all_users[int(pw[2])]=pw[0]
+            blob_writer.write_item(all_users_d,blob.CONTAINER,'users')
 
         if unknown_groups:
             missing_group_data=remote_command.run_remote_cmd([f'for i in {" ".join([ str(i) for i in unknown_groups ])}; do getent group $i; done'])
@@ -129,21 +127,20 @@ def main():
                 split_line=line.split(':')
                 if split_line[0] in unknown_groups or int(split_line[2]) in unknown_groups:
                     group_users=split_line[3].split(',')
-                    group_entry={ 'id': split_line[0],
-                                  'gid': int(split_line[2]),
-                                  'PartitionKey': config.settings['remote_cmd_host'],
+                    all_groups_d[split_line[0]]={ 'gid': int(split_line[2]),
                                   'users': group_users
                                 }
                     #futures.append(writer.create_item('groups',group_entry))
-                    writer.create_item('groups',group_entry)
+                    #writer.create_item('groups',group_entry)
                     ### unknown_groups can contain either gids or group names
                     ### Fortunately, gids are always first, so we can discard the
                     ### group name if it exists to prevent multiple entries
                     ### being created for the same group name.
                     unknown_groups.discard(split_line[0])
                     unknown_groups.discard(int(split_line[2]))
-                    print(f"Group entry for {group_entry['id']} created")
-                    all_groups[group_entry['gid']]=group_entry['id']
+                    print(f"Group entry for {split_line[0]} created")
+                    all_groups[int(split_line[2])]=split_line[0]
+            blob_writer.write_item(all_groups_d,blob.CONTAINER,'groups')
         
         for entry in deferred_entries:
             try:
@@ -162,7 +159,6 @@ def main():
             except KeyError:
                 pass
 
-            entry['PartitionKey'] = f'{entry["user"]}_{entry["ownership"]}_{entry["location"]}'
             #futures.append(writer.create_item("files_report",db_entry))
             writer.create_item("files_report",db_entry)
     

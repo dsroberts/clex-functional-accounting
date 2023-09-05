@@ -17,5 +17,8 @@ settings = {
     'remote_cmd_host': os.environ.get('REMOTE_CMD_HOST'),
     'remote_fs_keys': remote_fs_keys,
     'remote_fs_paths': remote_fs_paths,
-    'dry_run': os.environ.get('CLEXFA_DRY_RUN',False)
+    'dry_run': os.environ.get('CLEXFA_DRY_RUN',False),
+    'blob_container': os.environ.get('REMOTE_CMD_HOST',None),
+    'blob_host': os.environ.get('BLOB_ACCOUNT_HOST'),
+    'blob_key': os.environ.get('BLOB_ACCOUNT_KEY')
 }

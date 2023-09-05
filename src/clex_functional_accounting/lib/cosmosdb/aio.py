@@ -18,7 +18,7 @@ class CosmosDBWriter():
         self.client = cosmos_aio.CosmosClient(HOST, {'masterKey':WRITER_KEY}, user_agent="CosmosDBPythonQuickstart", user_agent_overwrite=True)
         self.db_clients = {}
         self.container_clients = {}
-        self.partition_keys = {}
+        self.quarterly = {}
         self.client_caches = {}
     
     async def close(self):
@@ -37,18 +37,11 @@ class CosmosDBWriter():
             if not db_id:
                 raise KeyError(f"If {container_id} does not already have a client, {db_id} must be provided")
             db = await self.get_db(db_id)
-            if quarterly:
-                d = datetime.now()
-                container_name=f"{container_id}_{d.year}.q{(d.month-1)//3+1}"
-            else:
-                container_name=container_id
+            self.quarterly[container_id] = quarterly
             try:
-                self.container_clients[container_id] = await db.create_container(id=container_name,partition_key=PartitionKey(path='/'+partition_key))
-                self.partition_keys[container_id] = partition_key
+                self.container_clients[container_id] = await db.create_container(id=container_id,partition_key=PartitionKey(path='/PartitionKey'))
             except (cosmos_exceptions.CosmosResourceExistsError,cosmos_exceptions.CosmosHttpResponseError):
-                self.container_clients[container_id] = db.get_container_client(container_name)
-                out_data = await self.container_clients[container_id].read()
-                self.partition_keys[container_id] = out_data['partitionKey']['paths'][0].lstrip('/')
+                self.container_clients[container_id] = db.get_container_client(container_id)
             
         return self.container_clients[container_id]
     
@@ -62,11 +55,7 @@ class CosmosDBWriter():
             raise NotImplementedError("Container client does not exist")
         
         container_client = await self.get_container(container)
-        pk=self.partition_keys[container]
-
-        if pk not in d:
-            raise KeyError(f"Partition Key ({pk}) not present in object to create")
-
+        d['PartitionKey'] = self._get_partition_key_val(container)
         await container_client.create_item(body=d)
 
     async def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
@@ -78,10 +67,9 @@ class CosmosDBWriter():
         if once_off:
             if field is not None:
                 raise KeyError("When 'once_off' is true the field can only be id")
-            if partition_key_val is None:
-                raise KeyError("When 'once_off' is true, partition_key_val must be provided")
         
             container_client = await self.get_container(container)
+            partition_key_val = self._get_partition_key_val(container)
 
             try:
                 return [ await container_client.read_item(item=item,partition_key=partition_key_val), ]
@@ -126,11 +114,7 @@ class CosmosDBWriter():
             raise NotImplementedError("Container client does not exist")
 
         container_client = await self.get_container(container)
-        pk=self.partition_keys[container]
-
-        if pk not in d:
-            raise KeyError(f"Partition Key ({pk}) not present in object to create")
-
+        d['PartitionKey'] = self._get_partition_key_val(container)
         await container_client.upsert_item(body=d)
 
     async def query(self, container: str, fields: Optional[Union[str,List[str]]]=None,where: Optional[List[str]] = None,order: Optional[str] = None,offset: Optional[int] = None,limit: Optional[int] = None):
@@ -171,3 +155,14 @@ class CosmosDBWriter():
             return [ item async for item in container_client.query_items(q)]
         except cosmos_exceptions.CosmosHttpResponseError:
             return []
+
+    def _get_partition_key_val(self,container: str, quarter: Optional[str] = None):
+        if self.quarterly[container]:
+            if quarter:
+                return quarter
+            else:
+                date = datetime.now()
+                return f"{date.year}.q{(date.month-1)//3+1}"
+                
+        else:
+            return "1"

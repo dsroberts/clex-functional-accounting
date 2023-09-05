@@ -1,9 +1,8 @@
 # function_app.py
 
 from flask import Flask, Response, render_template_string
-from clex_functional_accounting.lib import config,cosmosdb
+from clex_functional_accounting.lib import config,cosmosdb,blob,group_list
 import azure.functions as func
-import asyncio
 from datetime import datetime
 
 TEMPLATE='''
@@ -100,65 +99,93 @@ TEMPLATE='''
 
 flask_app = Flask(__name__)
 
-async def return_http(username: str):
+@flask_app.get("/demo/<username>")
+def return_http(username: str):
 
     storage_list=("scratch","gdata","massdata")
     storage_params=("quota","usage","iquota","iusage")
 
-    writer = cosmosdb.CosmosDBWriter()
-    compute_future = writer.get_container("compute","Accounting",quarterly=True)
-    storage_future = writer.get_container("storage","Accounting",quarterly=True)
-    _ = await writer.get_container("users","Accounting")
-    user_d = await writer.read_items("users",username,partition_key_val='gadi',once_off=True)
-    if not user_d:
-        compute_future.cancel()
-        storage_future.cancel()
-        await writer.close()
+    my_groups = group_list.get_group_list()
+
+    db_writer = cosmosdb.CosmosDBWriter()
+    blob_writer = blob.BlobWriter()
+    _ = db_writer.get_container("compute","Accounting",quarterly=True)
+    _ = db_writer.get_container("storage","Accounting",quarterly=True)
+
+    user_d = blob_writer.read_item(blob.CONTAINER,'users')
+
+    if username not in user_d:
         return Response("Invalid User",404)
 
-    proj_list = user_d[0]['groups']
+    proj_list = [ proj for proj in user_d[username]['groups'] if proj in my_groups ]
 
-    compute_data=[]
     keys=['compute_grant','compute_total']
     for i in storage_list:
         keys.extend([ f"{i}_{j}" for j in storage_params ])
 
-    await asyncio.gather(compute_future,storage_future)
-    futures=[]
+    query_projs=', '.join([ "'" + proj + "'" for proj in proj_list ])
+    compute_queries = db_writer.query("compute",["project","user","usage"],[f"project in ({query_projs})","user IN ('grant','total')"],'ts DESC',0,2*len(proj_list))
+    storage_queries = db_writer.query("storage",["project","fs","usage","quota","iusage","iquota"],f"project in ({query_projs})",'ts DESC',0,3*len(proj_list))
 
-    for proj in proj_list:
-        futures.append(writer.query("compute",["project","user","usage"],[f"project='{proj}'","user IN ('grant','total')"],'ts DESC',0,2))
-        futures.append(writer.query("storage",["project","fs","usage","quota","iusage","iquota"],f"project='{proj}'",'ts DESC',0,3))
+    ### Construct all keys we're expecting
+    seen_keys=[]
+    for i in keys:
+        seen_keys.extend([ f"{i}_{proj}" for proj in proj_list ])
+    seen_data=dict.fromkeys(seen_keys,False)
 
-    all_query_results = await asyncio.gather(*futures)
-
-    for query_compute, query_storage in zip(all_query_results[0::2],all_query_results[1::2]):
-        row = dict.fromkeys(keys,0)
-        if query_compute:
-            for d in query_compute:
-                row['compute_'+d['user']] = d['usage']
-        if query_storage:
-            seen = dict.fromkeys(storage_list,False)
-            for d in query_storage:
-                fs=d['fs']
-                if not seen[fs]:
-                    seen[fs] = True
-                    for k in storage_params:
-                        row[f"{fs}_{k}"] = d[k]
-        if all([i==0 for i in row.values()]):
+    data_d={}
+    for compute_query in compute_queries:
+        seen_key = f"compute_{compute_query['user']}_{compute_query['project']}"
+        if seen_data[seen_key]:
             continue
-        row['proj']=query_compute[0]['project']
-        compute_data.append(row)
+        seen_data[seen_key] = True
+        if compute_query['project'] in data_d:
+            row = data_d[compute_query['project']]
+        else:
+            row = dict.fromkeys(keys,0)
+        row['compute_'+compute_query['user']] = compute_query['usage']
+        data_d[compute_query['project']] = row
+    
+    for storage_query in storage_queries:
+        seen_key = f"{storage_query['fs']}_quota_{storage_query['project']}"
+        if seen_data[seen_key]:
+            continue
+        seen_data[seen_key] = True
+        if storage_query['project'] in data_d:
+            row = data_d[storage_query['project']]
+        else:
+            row = dict.fromkeys(keys,0)
+        for k in storage_params:
+            row[f"{storage_query['fs']}_{k}"] = storage_query[k]
+        data_d[storage_query['project']] = row
 
-    resp = Response(render_template_string(TEMPLATE,compute_data=compute_data,user={'firstname':user_d[0]['pw_name'].split()[0],'groups':proj_list}))
+    compute_data=[]
+    for k,v in data_d.items():
+        compute_data.append({'proj':k} | v )
 
-    await writer.close()
+
+    #for query_compute, query_storage in zip(all_query_results[0::2],all_query_results[1::2]):
+    #    row = dict.fromkeys(keys,0)
+    #    if query_compute:
+    #        for d in query_compute:
+    #            row['compute_'+d['user']] = d['usage']
+    #    if query_storage:
+    #        seen = dict.fromkeys(storage_list,False)
+    #        for d in query_storage:
+    #            fs=d['fs']
+    #            if not seen[fs]:
+    #                seen[fs] = True
+    #                for k in storage_params:
+    #                    row[f"{fs}_{k}"] = d[k]
+    #    if all([i==0 for i in row.values()]):
+    #        continue
+    #    row['proj']=query_compute[0]['project']
+    #    compute_data.append(row)
+
+
+    resp = Response(render_template_string(TEMPLATE,compute_data=compute_data,user={'firstname':user_d[username]['pw_name'].split()[0],'groups':user_d[username]['groups']}))
 
     return resp
-
-@flask_app.get("/demo/<username>")
-def async_return_http(username):
-    return asyncio.run(return_http(username))
 
 app = func.WsgiFunctionApp(app=flask_app.wsgi_app, 
                            http_auth_level=func.AuthLevel.ANONYMOUS)

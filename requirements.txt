@@ -1,6 +1,7 @@
 azure-core
 azure-cosmos
 azure-functions
+azure-storage-blob
 Flask
 asyncio
 aiohttp

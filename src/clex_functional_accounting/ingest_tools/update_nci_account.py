@@ -72,8 +72,8 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
 async def main():
 
     writer = cosmosdb.CosmosDBWriter()
-    compute_future = writer.get_container('compute',"Accounting","project",quarterly=True)
-    storage_future = writer.get_container('storage',"Accounting","project",quarterly=True)
+    compute_future = writer.get_container('compute',"Accounting",quarterly=True)
+    storage_future = writer.get_container('storage',"Accounting",quarterly=True)
     ### Placeholder for grabbing list of groups
     ts = str(datetime.now())
     my_groups = group_list.get_group_list()

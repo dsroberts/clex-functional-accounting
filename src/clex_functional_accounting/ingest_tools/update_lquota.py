@@ -9,7 +9,7 @@ from datetime import datetime
 async def main():
     
     writer = cosmosdb.CosmosDBWriter()
-    get_future = writer.get_container("storage","Accounting","project",quarterly=True)
+    get_future = writer.get_container("storage",cosmosdb.DATABASE_ID,quarterly=True)
     lquota_out=remote_command.run_remote_cmd(["lquota","-q","--no-pretty-print"])
     _ = await get_future
     
