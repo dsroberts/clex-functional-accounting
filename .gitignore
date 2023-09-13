@@ -13,3 +13,5 @@ ChangeLog
 ### Azure functions stuff
 .python_packages
 local.settings.json
+### Local config
+config.conf

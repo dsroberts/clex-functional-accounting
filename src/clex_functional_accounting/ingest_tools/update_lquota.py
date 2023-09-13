@@ -20,9 +20,13 @@ async def main():
     futures=[]
 
     for line in lquota_out:
-        fields=line.split()
+        fields=line.split(maxsplit=len(field_names))
         for i in range(2,len(fields)):
-            fields[i]=int(fields[i])
+            try:
+                fields[i]=int(fields[i])
+            except ValueError:
+                ### Attempt to do int('Over ... quota')...
+                pass
         ### Can't really use id for anything here but it is required
         ### Put in some uuid
         #entry={ 'id': str(uuid.uuid4()),
@@ -38,7 +42,7 @@ async def main():
         if entry['project'] in my_groups:
             futures.append(writer.create_item("storage",entry))
 
-    await asyncio.gather(*futures)
+    await asyncio.wait(futures)
     await writer.close()
 
 def async_main():
