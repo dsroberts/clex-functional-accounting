@@ -1,9 +1,8 @@
 # function_app.py
 
 from flask import Flask, Response, render_template_string
-from clex_functional_accounting.lib import config,cosmosdb,blob,group_list
+from clex_functional_accounting.lib import cosmosdb,blob,group_list
 import azure.functions as func
-from datetime import datetime
 
 TEMPLATE='''
 <!DOCTYPE html>
