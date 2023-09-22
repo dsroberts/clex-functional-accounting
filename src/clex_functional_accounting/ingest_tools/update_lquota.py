@@ -13,7 +13,7 @@ async def main():
     lquota_out=remote_command.run_remote_cmd(["lquota","-q","--no-pretty-print"])
     _ = await get_future
     
-    ts = str(datetime.now())
+    ts = datetime.now().isoformat() + "Z"
     field_names=[ 'project','fs','usage','quota','limit','iusage','iquota','ilimit' ]
 
     my_groups = group_list.get_group_list()

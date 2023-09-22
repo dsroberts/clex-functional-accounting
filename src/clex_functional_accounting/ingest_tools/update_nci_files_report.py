@@ -20,7 +20,7 @@ def main():
 
     my_groups = group_list.get_group_list()
 
-    ts=str(datetime.now())
+    ts=datetime.now().isoformat() + "Z"
 
     defer_entry = False
     unknown_users=set()

@@ -1,190 +1,219 @@
 # function_app.py
 
-from flask import Flask, Response, render_template_string
+from werkzeug.wrappers import Request, Response
+from werkzeug.routing import Map, Rule
+from werkzeug.exceptions import HTTPException, NotFound
 from clex_functional_accounting.lib import cosmosdb,blob,group_list
+import json
+from datetime import datetime
+
 import azure.functions as func
+from typing import Any, Dict, List, Tuple, Optional, Union
 
-TEMPLATE='''
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Title Here</title>
-    </head>
-    <h2>Hello {{user.firstname}}</h2>
-    <br>
-    You are a member of the following projects
-    <ul>
-    {% for proj in user.groups %}
-    <li>{{proj}}</li>
-    {% endfor %}
-    </ul>
-    <br>
+class Datetime_with_quarter(datetime):
+    def quarter(self):
+        return f"{self.year}.q{(self.month-1)//3+1}"
 
-    Current resource usage for your projects:
-    <table>
-        <thead>
-            <tr>
-                <th>Project</th>
-                <th>SU Usage</th>
-                <th>SU Grant</th>
-                <th>Scratch Usage</th>
-                <th>Scratch Grant</th>
-                <th>Scratch iUsage</th>
-                <th>Scratch iGrant</th>
-                <th>Gdata Usage</th>
-                <th>Gdata Grant</th>
-                <th>Gdata iUsage</th>
-                <th>Gdata iGrant</th>
-                <th>Massdata Usage</th>
-                <th>Massdata Grant</th>
-                <th>Massdata iUsage</th>
-                <th>Massdata iGrant</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in compute_data %}
-            <tr>
-                <td>
-                    {{row.proj}}
-                </td>
-                <td>
-                    {{row.compute_total}}
-                </td>
-                <td>
-                    {{row.compute_grant}}
-                </td>
-                <td>
-                    {{row.scratch_usage}}
-                </td>
-                <td>
-                    {{row.scratch_quota}}
-                </td>
-                <td>
-                    {{row.scratch_iusage}}
-                </td>
-                <td>
-                    {{row.scratch_iquota}}
-                </td>
-                <td>
-                    {{row.gdata_usage}}
-                </td>
-                <td>
-                    {{row.gdata_quota}}
-                </td>
-                <td>
-                    {{row.gdata_iusage}}
-                </td>
-                <td>
-                    {{row.gdata_iquota}}
-                </td>
-                <td>
-                    {{row.massdata_usage}}
-                </td>
-                <td>
-                    {{row.massdata_quota}}
-                </td>
-                <td>
-                    {{row.massdata_iusage}}
-                </td>
-                <td>
-                    {{row.massdata_iquota}}
-                </td>
-            </tr>
-            {%endfor%}
-        </tbody>
-    </table>
-</html>
-'''
+def content_range_headers(who: str, start: int, end: int, total: int):
+    return {
+        'Content-Range': f"{who} {start}-{end}/{total}",
+        'Access-Control-Expose-Headers': 'Content-Range'
+    }
 
-flask_app = Flask(__name__)
+def filter_list(in_list: List[Dict[str,Any]],filt:Dict[str,Union[str,int,List]]):
+    if not in_list:
+        return in_list
+    ### Don't bother if none of the keys exist in the output
+    out_list=[]
+    if any( k in in_list[0] for k in filt ):
+        real_filt = { k:v for k,v in filt.items() if k in in_list[0] }
+        ### Handle the case where we're filtering on a single value
+        for k,v in real_filt.items():
+            ### Can have a pretty small list of integer conversions given this
+            ### function is only for users and groups
+            if k in [ "uid", "gid" ]: v = int(v)
+            if isinstance(v,str) or isinstance(v,int): real_filt[k] = [v,]
+        for l in in_list:
+            if all( l[k] in v for k,v in real_filt.items() ):
+                out_list.append(l)
+        return out_list
+    else:
+        return in_list
 
-@flask_app.get("/demo/<username>")
-def return_http(username: str):
 
-    storage_list=("scratch","gdata","massdata")
-    storage_params=("quota","usage","iquota","iusage")
+class AccountingAPI(object):
+    def __init__(self,config):
 
-    my_groups = group_list.get_group_list()
+        url_map = []
+        for func in dir(self):
+            if func.startswith("api_get_"):
+                url_map.append(Rule(f'/api/v0/{func.split("_")[-1]}',endpoint=func))
+                url_map.append(Rule(f'/api/v0/{func.split("_")[-1]}/<param>',endpoint=func))
+        
+        self.url_map = Map(url_map)
 
-    db_writer = cosmosdb.CosmosDBWriter()
-    blob_writer = blob.BlobWriter()
-    _ = db_writer.get_container("compute","Accounting",quarterly=True)
-    _ = db_writer.get_container("storage","Accounting",quarterly=True)
+    def error_404(self):
+        return Response("{'data': 'Not Found'}",404,content_type="application/json")
 
-    user_d = blob_writer.read_item(blob.CONTAINER,'users')
+    def error_400(self):
+        return Response("{'data': 'Invalid'}",404,content_type="application/json")
 
-    if username not in user_d:
-        return Response("Invalid User",404)
-
-    proj_list = [ proj for proj in user_d[username]['groups'] if proj in my_groups ]
-
-    keys=['compute_grant','compute_total']
-    for i in storage_list:
-        keys.extend([ f"{i}_{j}" for j in storage_params ])
-
-    query_projs=', '.join([ "'" + proj + "'" for proj in proj_list ])
-    compute_queries = db_writer.query("compute",["project","user","usage"],[f"project in ({query_projs})","user IN ('grant','total')"],'ts DESC',0,2*len(proj_list))
-    storage_queries = db_writer.query("storage",["project","fs","usage","quota","iusage","iquota"],f"project in ({query_projs})",'ts DESC',0,3*len(proj_list))
-
-    ### Construct all keys we're expecting
-    seen_keys=[]
-    for i in keys:
-        seen_keys.extend([ f"{i}_{proj}" for proj in proj_list ])
-    seen_data=dict.fromkeys(seen_keys,False)
-
-    data_d={}
-    for compute_query in compute_queries:
-        seen_key = f"compute_{compute_query['user']}_{compute_query['project']}"
-        if seen_data[seen_key]:
-            continue
-        seen_data[seen_key] = True
-        if compute_query['project'] in data_d:
-            row = data_d[compute_query['project']]
-        else:
-            row = dict.fromkeys(keys,0)
-        row['compute_'+compute_query['user']] = compute_query['usage']
-        data_d[compute_query['project']] = row
+    def wsgi_app(self, environ, start_response):
+        request = Request(environ)
+        response = self.dispatch_request(request)
+        return response(environ, start_response)
     
-    for storage_query in storage_queries:
-        seen_key = f"{storage_query['fs']}_quota_{storage_query['project']}"
-        if seen_data[seen_key]:
-            continue
-        seen_data[seen_key] = True
-        if storage_query['project'] in data_d:
-            row = data_d[storage_query['project']]
+    def __call__(self, environ, start_response: Response):
+        return self.wsgi_app(environ, start_response)
+
+    def dispatch_request(self, request: Request):
+        adapter = self.url_map.bind_to_environ(request.environ)
+        
+        try:
+            endpoint, values = adapter.match()
+        except NotFound:
+            return self.error_404()
+        except HTTPException as e:
+            return e
+        
+        try:
+            return getattr(self,endpoint)(request,**values)
+        except NotFound:
+            return self.error_404()
+        except HTTPException as e:
+            return e
+        
+    ### This function handles getOne, getMany, getManyReference and getList
+    def api_get_users(self,request: Request,param=None):
+
+        blob_writer = blob.BlobWriter()
+        user_d = blob_writer.read_item(blob.CONTAINER,'users')
+
+        if param:
+            try:
+                return Response(json.dumps({"id":param} | user_d[param]),content_type="application/json")
+            except KeyError:
+                return Response('{}',content_type="application/json")
+
+        all_user_list=[ {"id":k} | v for k,v in user_d.items() ]
+        out_l=all_user_list
+        extra_headers={}
+
+        ### Filter
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+            out_l = filter_list(all_user_list,filt)
+
+        ### Sort
+        if "sort" in request.args:
+            field,order = json.loads(request.args.get("sort"))
+            out_l=sorted(out_l,key=lambda x: x[field],reverse=(order=="DESC"))
+
+        ### Pagination
+        if "range" in request.args:
+            start, end = json.loads(request.args["range"])
+            total = len(out_l)
+            end=min(end,total-1)
+            out_l=out_l[start:end]
+            extra_headers = content_range_headers("users",start,end,total)
+
+        return Response(json.dumps(out_l),content_type="application/json",headers=extra_headers)
+    
+    def api_get_groups(self,request: Request,param=None):
+
+        blob_writer = blob.BlobWriter()
+        group_d = blob_writer.read_item(blob.CONTAINER,'groups')
+
+        if param:
+            try:
+                return Response(json.dumps({"id":param} | group_d[param]),content_type="application/json")
+            except KeyError:
+                return Response('{}',content_type="application/json")
+
+        all_group_list=[ {"id":k} | v for k,v in group_d.items() ]
+        out_l=all_group_list
+        extra_headers={}
+
+        ### Filter
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+            out_l = filter_list(all_group_list,filt)
+
+        ### Sort
+        if "sort" in request.args:
+            field,order = json.loads(request.args.get("sort"))
+            out_l=sorted(out_l,key=lambda x: x[field],reverse=(order=="DESC"))
+
+        ### Pagination
+        if "range" in request.args:
+            start, end = json.loads(request.args["range"])
+            total = len(out_l)
+            end=min(end,total-1)
+            out_l=out_l[start:end]
+            extra_headers = content_range_headers("groups",start,end,total)
+
+        return Response(json.dumps(out_l),content_type="application/json",headers=extra_headers)
+
+    def api_get_compute(self,request,param=None):
+
+        extra_headers={}
+
+        quarters=[]
+        ### First up. figure out how many containers we need to grab
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+            if "ts" in filt:
+                if isinstance(filt["ts"],str):
+                    filt["ts"] = [ filt["ts"], ]
+                q_set = set()
+                for v in filt["ts"]:
+                    q_set = q_set | Datetime_with_quarter.fromisoformat(v).quarter()
+                quarters = sorted(list(q_set))
+            else:
+                quarters = [ Datetime_with_quarter.now().quarter(), ]
+
         else:
-            row = dict.fromkeys(keys,0)
-        for k in storage_params:
-            row[f"{storage_query['fs']}_{k}"] = storage_query[k]
-        data_d[storage_query['project']] = row
+            quarters = [ Datetime_with_quarter.now().quarter(), ]
+            
 
-    compute_data=[]
-    for k,v in data_d.items():
-        compute_data.append({'proj':k} | v )
+        db_writer = cosmosdb.CosmosDBWriter()
+        _ = db_writer.get_container("compute","Accounting",quarterly=True)
+        
+        if param:
+            self.error_400()
 
+        where_list=[]
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+            for k,v in filt.items():
+                if k == "ts": continue
+                if isinstance(v,List): 
+                    filt[k] = ','.join( [ "'" + i + "'" for i in v] )
+                elif isinstance(v,str):
+                    filt[k] = "'" + v + "'"
+                where_list.append(f"{k} IN ({filt[k]})")
+        
+        order_str=None
+        if "sort" in request.args:
+            field,order = json.loads(request.args.get("sort"))
+            order_str = field
+            if order == "DESC":
+                order_str = order_str + " DESC"
+        
+        start = None
+        total = None
+        if "range" in request.args:
+            start, end = json.loads(request.args["range"])
+            total=end-start+1
+            extra_headers = content_range_headers("groups",start,end,total)
 
-    #for query_compute, query_storage in zip(all_query_results[0::2],all_query_results[1::2]):
-    #    row = dict.fromkeys(keys,0)
-    #    if query_compute:
-    #        for d in query_compute:
-    #            row['compute_'+d['user']] = d['usage']
-    #    if query_storage:
-    #        seen = dict.fromkeys(storage_list,False)
-    #        for d in query_storage:
-    #            fs=d['fs']
-    #            if not seen[fs]:
-    #                seen[fs] = True
-    #                for k in storage_params:
-    #                    row[f"{fs}_{k}"] = d[k]
-    #    if all([i==0 for i in row.values()]):
-    #        continue
-    #    row['proj']=query_compute[0]['project']
-    #    compute_data.append(row)
+        compute_queries=[]
+        for q in quarters:
+            compute_queries.extend(db_writer.query("compute",fields=None,where=where_list,order=order_str,offset=start,limit=total,quarter=q))
 
+        return Response(json.dumps(compute_queries),content_type="application/json",headers=extra_headers)
 
-    resp = Response(render_template_string(TEMPLATE,compute_data=compute_data,user={'firstname':user_d[username]['pw_name'].split()[0],'groups':user_d[username]['groups']}))
+werkzeug_app = AccountingAPI({})
 
-    return resp
-
-app = func.WsgiFunctionApp(app=flask_app.wsgi_app, 
+app = func.WsgiFunctionApp(app=werkzeug_app, 
                            http_auth_level=func.AuthLevel.ANONYMOUS)

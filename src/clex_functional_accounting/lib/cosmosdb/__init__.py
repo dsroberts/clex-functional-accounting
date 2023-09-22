@@ -137,8 +137,9 @@ class CosmosDBWriter():
                 q+=f" WHERE c.{' AND c.'.join(i for i in where)}"
             elif isinstance(where,str):
                 q+=f" WHERE c.{where}"
-        
-        q+=f" AND c.PartitionKey = '{pkv}'"
+            q+=f" AND c.PartitionKey = '{pkv}'"
+        else:
+            q+=f" WHERE c.PartitionKey = '{pkv}'"
 
         if order:
             q+=f" ORDER BY c.{order}"

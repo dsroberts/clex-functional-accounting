@@ -2,6 +2,6 @@ azure-core
 azure-cosmos
 azure-functions
 azure-storage-blob
-Flask
+werkzeug>=2
 asyncio
 aiohttp

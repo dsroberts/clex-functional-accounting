@@ -75,7 +75,7 @@ async def main():
     compute_future = writer.get_container('compute',"Accounting",quarterly=True)
     storage_future = writer.get_container('storage',"Accounting",quarterly=True)
     ### Placeholder for grabbing list of groups
-    ts = str(datetime.now())
+    ts = datetime.now().isoformat() + "Z"
     my_groups = group_list.get_group_list()
 
     nci_account_out = remote_command.run_remote_cmd([f'for i in {" ".join(my_groups)}; do nci_account -P $i -vvv --no-pretty-print; sleep 0.1; done'])
