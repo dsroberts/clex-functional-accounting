@@ -5,10 +5,12 @@ from werkzeug.routing import Map, Rule
 from werkzeug.exceptions import HTTPException, NotFound
 from clex_functional_accounting.lib import cosmosdb,blob,group_list
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import azure.functions as func
 from typing import Any, Dict, List, Tuple, Optional, Union
+
+one_hour=timedelta(hours=1)
 
 class Datetime_with_quarter(datetime):
     def quarter(self):
@@ -167,7 +169,7 @@ class AccountingAPI(object):
                     filt["ts"] = [ filt["ts"], ]
                 q_set = set()
                 for v in filt["ts"]:
-                    q_set = q_set | Datetime_with_quarter.fromisoformat(v).quarter()
+                    q_set.add(Datetime_with_quarter.fromisoformat(v).quarter())
                 quarters = sorted(list(q_set))
             else:
                 quarters = [ Datetime_with_quarter.now().quarter(), ]
@@ -186,6 +188,7 @@ class AccountingAPI(object):
         if "filter" in request.args:
             filt=json.loads(request.args.get("filter"))
             for k,v in filt.items():
+                ### Handle timestamps later
                 if k == "ts": continue
                 if isinstance(v,List): 
                     filt[k] = ','.join( [ "'" + i + "'" for i in v] )
@@ -209,7 +212,24 @@ class AccountingAPI(object):
 
         compute_queries=[]
         for q in quarters:
-            compute_queries.extend(db_writer.query("compute",fields=None,where=where_list,order=order_str,offset=start,limit=total,quarter=q))
+            timestamps = filt.get("ts",None)
+            if timestamps:
+                ### Compute data is six-hourly at 0, 6, 12 and 18 UTC
+                ### Though there is quite a bit of leeway there
+                ### If timestamps is a string, construct a between statement
+                ### for the hours either side of those
+                if isinstance(timestamps,str):
+                    t=datetime.fromisoformat(timestamps)
+                    where_list_w_timestamps = where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
+                elif isinstance(timestamps,List):
+                    ### Handle an interval otherwise
+                    timelist=sorted(timestamps)
+                    tstart = datetime.fromisoformat(timelist[0])
+                    tend = datetime.fromisoformat(timelist[-1])
+                    where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
+            else:
+                where_list_w_timestamps = where_list
+            compute_queries.extend(db_writer.query("compute",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
 
         return Response(json.dumps(compute_queries),content_type="application/json",headers=extra_headers)
 
