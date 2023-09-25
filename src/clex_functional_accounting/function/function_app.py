@@ -12,9 +12,14 @@ from typing import Any, Dict, List, Tuple, Optional, Union
 
 one_hour=timedelta(hours=1)
 
+STANDARD_HEADERS= {
+        'Access-Control-Allow-Origin': '*'
+    }
+
 class Datetime_with_quarter(datetime):
     def quarter(self):
         return f"{self.year}.q{(self.month-1)//3+1}"
+
 
 def content_range_headers(who: str, start: int, end: int, total: int):
     return {
@@ -99,7 +104,7 @@ class AccountingAPI(object):
 
         all_user_list=[ {"id":k} | v for k,v in user_d.items() ]
         out_l=all_user_list
-        extra_headers={}
+        headers=STANDARD_HEADERS
 
         ### Filter
         if "filter" in request.args:
@@ -117,9 +122,9 @@ class AccountingAPI(object):
             total = len(out_l)
             end=min(end,total-1)
             out_l=out_l[start:end]
-            extra_headers = content_range_headers("users",start,end,total)
+            headers = headers | content_range_headers("users",start,end,total)
 
-        return Response(json.dumps(out_l),content_type="application/json",headers=extra_headers)
+        return Response(json.dumps(out_l),content_type="application/json",headers=headers)
     
     def api_get_groups(self,request: Request,param=None):
 
@@ -134,7 +139,7 @@ class AccountingAPI(object):
 
         all_group_list=[ {"id":k} | v for k,v in group_d.items() ]
         out_l=all_group_list
-        extra_headers={}
+        headers=STANDARD_HEADERS
 
         ### Filter
         if "filter" in request.args:
@@ -152,13 +157,13 @@ class AccountingAPI(object):
             total = len(out_l)
             end=min(end,total-1)
             out_l=out_l[start:end]
-            extra_headers = content_range_headers("groups",start,end,total)
+            headers = headers | content_range_headers("groups",start,end,total)
 
-        return Response(json.dumps(out_l),content_type="application/json",headers=extra_headers)
+        return Response(json.dumps(out_l),content_type="application/json",headers=headers)
 
     def api_get_compute(self,request,param=None):
 
-        extra_headers={}
+        headers=STANDARD_HEADERS
 
         quarters=[]
         ### First up. figure out how many containers we need to grab
@@ -208,7 +213,7 @@ class AccountingAPI(object):
         if "range" in request.args:
             start, end = json.loads(request.args["range"])
             total=end-start+1
-            extra_headers = content_range_headers("groups",start,end,total)
+            headers = headers | content_range_headers("groups",start,end,total)
 
         compute_queries=[]
         for q in quarters:
@@ -231,7 +236,7 @@ class AccountingAPI(object):
                 where_list_w_timestamps = where_list
             compute_queries.extend(db_writer.query("compute",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
 
-        return Response(json.dumps(compute_queries),content_type="application/json",headers=extra_headers)
+        return Response(json.dumps(compute_queries),content_type="application/json",headers=headers)
 
 werkzeug_app = AccountingAPI({})
 
