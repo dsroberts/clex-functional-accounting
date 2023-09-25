@@ -121,7 +121,7 @@ class AccountingAPI(object):
             start, end = json.loads(request.args["range"])
             total = len(out_l)
             end=min(end,total-1)
-            out_l=out_l[start:end]
+            out_l=out_l[start:end+1]
             headers = headers | content_range_headers("users",start,end,total)
 
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
@@ -156,7 +156,7 @@ class AccountingAPI(object):
             start, end = json.loads(request.args["range"])
             total = len(out_l)
             end=min(end,total-1)
-            out_l=out_l[start:end]
+            out_l=out_l[start:end+1]
             headers = headers | content_range_headers("groups",start,end,total)
 
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
@@ -166,9 +166,12 @@ class AccountingAPI(object):
         headers=STANDARD_HEADERS
 
         quarters=[]
-        ### First up. figure out how many containers we need to grab
+        filt={}
         if "filter" in request.args:
             filt=json.loads(request.args.get("filter"))
+
+        ### First up. figure out how many containers we need to grab
+        if filt:
             if "ts" in filt:
                 if isinstance(filt["ts"],str):
                     filt["ts"] = [ filt["ts"], ]
@@ -190,8 +193,8 @@ class AccountingAPI(object):
             self.error_400()
 
         where_list=[]
-        if "filter" in request.args:
-            filt=json.loads(request.args.get("filter"))
+        
+        if filt:
             for k,v in filt.items():
                 ### Handle timestamps later
                 if k == "ts": continue
@@ -213,27 +216,27 @@ class AccountingAPI(object):
         if "range" in request.args:
             start, end = json.loads(request.args["range"])
             total=end-start+1
-            headers = headers | content_range_headers("groups",start,end,total)
+            headers = headers | content_range_headers("compute",start,end,total)
 
         compute_queries=[]
         for q in quarters:
-            timestamps = filt.get("ts",None)
-            if timestamps:
-                ### Compute data is six-hourly at 0, 6, 12 and 18 UTC
-                ### Though there is quite a bit of leeway there
-                ### If timestamps is a string, construct a between statement
-                ### for the hours either side of those
-                if isinstance(timestamps,str):
-                    t=datetime.fromisoformat(timestamps)
-                    where_list_w_timestamps = where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
-                elif isinstance(timestamps,List):
-                    ### Handle an interval otherwise
-                    timelist=sorted(timestamps)
-                    tstart = datetime.fromisoformat(timelist[0])
-                    tend = datetime.fromisoformat(timelist[-1])
-                    where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
-            else:
-                where_list_w_timestamps = where_list
+            where_list_w_timestamps = where_list
+            if filt:
+                timestamps = filt.get("ts",None)
+                if timestamps:
+                    ### Compute data is six-hourly at 0, 6, 12 and 18 UTC
+                    ### Though there is quite a bit of leeway there
+                    ### If timestamps is a string, construct a between statement
+                    ### for the hours either side of those
+                    if isinstance(timestamps,str):
+                        t=datetime.fromisoformat(timestamps)
+                        where_list_w_timestamps = where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
+                    elif isinstance(timestamps,List):
+                        ### Handle an interval otherwise
+                        timelist=sorted(timestamps)
+                        tstart = datetime.fromisoformat(timelist[0])
+                        tend = datetime.fromisoformat(timelist[-1])
+                        where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
             compute_queries.extend(db_writer.query("compute",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
 
         return Response(json.dumps(compute_queries),content_type="application/json",headers=headers)
