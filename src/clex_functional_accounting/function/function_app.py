@@ -95,6 +95,7 @@ class AccountingAPI(object):
 
         blob_writer = blob.BlobWriter()
         user_d = blob_writer.read_item(blob.CONTAINER,'users')
+        monitored_projects = blob_writer.read_item(blob.CONTAINER,'projectlist')
 
         if param:
             try:
@@ -123,6 +124,10 @@ class AccountingAPI(object):
             end=min(end,total-1)
             out_l=out_l[start:end+1]
             headers = headers | content_range_headers("users",start,end,total)
+
+        for i in out_l:
+            i["groups"] = sorted(list(set(i["groups"]) & set(monitored_projects)))
+
 
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
     
