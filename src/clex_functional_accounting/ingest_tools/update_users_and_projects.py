@@ -12,7 +12,7 @@ def main():
     ### Get all data from these groups
     all_group_data=remote_command.run_remote_cmd([f'for i in {" ".join(my_groups)}; do getent group $i; done'])
 
-    group_d={}
+    group_d=writer.read_item(blob.CONTAINER,'groups')
     for line in all_group_data:
         split_line=line.split(':')
         group_users=split_line[3].split(',')
@@ -26,7 +26,7 @@ def main():
     ### Now get all users in all of these groups - batch the command to avoid hitting sssd on Gadi too hard
     user_list=list(all_seen_users)
     batch_size=100
-    user_d={}
+    user_d=writer.read_item(blob.CONTAINER,'users')
     for batch in range(len(user_list)//batch_size+1):
         all_user_data=remote_command.run_remote_cmd([f'for i in {" ".join(user_list[batch*batch_size:(batch+1)*batch_size])}; do getent passwd $i; id -Gn $i; sleep 0.01; done'])
         for passwd,idgn in zip(all_user_data[0::2],all_user_data[1::2]):
