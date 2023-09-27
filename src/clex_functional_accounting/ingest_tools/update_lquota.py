@@ -10,14 +10,17 @@ async def main():
     
     writer = cosmosdb.CosmosDBWriter()
     get_future = writer.get_container("storage",cosmosdb.DATABASE_ID,quarterly=True)
+    latest_future = writer.get_container("storage_latest",cosmosdb.DATABASE_ID)
     lquota_out=remote_command.run_remote_cmd(["lquota","-q","--no-pretty-print"])
-    _ = await get_future
     
     ts = datetime.now().isoformat() + "Z"
     field_names=[ 'project','fs','usage','quota','limit','iusage','iquota','ilimit' ]
 
     my_groups = group_list.get_group_list()
     futures=[]
+    entries=[]
+
+    await asyncio.wait([get_future,latest_future])
 
     for line in lquota_out:
         fields=line.split(maxsplit=len(field_names))
@@ -40,7 +43,17 @@ async def main():
         entry['system'] = config.settings['remote_cmd_host']
 
         if entry['project'] in my_groups:
+            entries.append(entry)
             futures.append(writer.create_item("storage",entry))
+
+    await asyncio.wait(futures)
+    print("Making latest entries")
+
+    futures = []
+    for entry in entries:
+        entry['id'] = f"{entry['system']}_{entry['fs']}_{entry['project']}"
+        if entry['project'] in my_groups:
+            futures.append(writer.upsert_item("storage_latest",entry))
 
     await asyncio.wait(futures)
     await writer.close()

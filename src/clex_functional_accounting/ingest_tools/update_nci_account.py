@@ -8,6 +8,8 @@ from typing import Dict, List, Union
 from ..lib import remote_command, config, group_list
 from ..lib.cosmosdb import aio as cosmosdb
 
+RATE_LIMIT=100
+
 def construct_compute_entry(user: str, val: str, ts: str, proj: str) -> Dict[str,Union[str,float]]:
     return {
         'id': str(uuid.uuid4()),
@@ -72,8 +74,10 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
 async def main():
 
     writer = cosmosdb.CosmosDBWriter()
-    compute_future = writer.get_container('compute',"Accounting",quarterly=True)
-    storage_future = writer.get_container('storage',"Accounting",quarterly=True)
+    compute_future = writer.get_container('compute',cosmosdb.DATABASE_ID,quarterly=True)
+    compute_latest_future = writer.get_container('compute_latest',cosmosdb.DATABASE_ID)
+    storage_latest_future = writer.get_container('storage_latest',cosmosdb.DATABASE_ID)
+    storage_future = writer.get_container('storage',cosmosdb.DATABASE_ID,quarterly=True)
     ### Placeholder for grabbing list of groups
     ts = datetime.now().isoformat() + "Z"
     my_groups = group_list.get_group_list()
@@ -92,9 +96,10 @@ async def main():
     ### Get the last entry
     entry_list.extend(parse_block(nci_account_out[block_start:],ts))
     
-    await asyncio.gather(compute_future,storage_future)
+    await asyncio.wait([compute_future,storage_future,compute_latest_future,storage_latest_future])
 
     futures = []
+    counter = 0
     for entry in entry_list:
         ### In this case we can have both 'storage' and 'compute' entries
         ### Figure out which and create the item in the right database
@@ -102,9 +107,34 @@ async def main():
                 futures.append(writer.create_item('storage',entry))
             else:
                 futures.append(writer.create_item('compute',entry))
-    
-    await asyncio.gather(*futures)
+
+            counter += 1
+            if counter >= RATE_LIMIT:
+                await asyncio.wait(futures)
+                counter=0
+                futures=[]
+
+    await asyncio.wait(futures)
+
+    futures = []
+    counter = 0
+    for entry in entry_list:
+        if 'fs' in entry:
+            entry['id'] = f"{entry['system']}_massdata_{entry['project']}"
+            futures.append(writer.upsert_item('latest_storage',entry))
+        else:
+            entry['id'] = f"{entry['system']}_{entry['user']}_{entry['project']}"
+            futures.append(writer.upsert_item('latest_compute',entry))
+
+        counter += 1
+        if counter >= RATE_LIMIT:
+            await asyncio.wait(futures)
+            counter=0
+            futures=[]
+
+    await asyncio.wait(futures)
     await writer.close()
+    print(len(futures))
 
 def async_main():
     asyncio.run(main())

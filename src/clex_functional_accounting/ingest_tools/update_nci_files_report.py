@@ -10,9 +10,10 @@ def main():
     ### Grab the list of groups we care about out of the database
     blob_writer=blob.BlobWriter()
     writer = cosmosdb.CosmosDBWriter()
-    #_ = writer.get_container("groups","Accounting")
-    #_ = writer.get_container("users","Accounting")
-    _ = writer.get_container("files_report","Accounting",quarterly=True)
+    #_ = writer.get_container("groups",cosmosdb.DATABASE_ID)
+    #_ = writer.get_container("users",cosmosdb.DATABASE_ID)
+    _ = writer.get_container("files_report",cosmosdb.DATABASE_ID,quarterly=True)
+    _ = writer.get_container("files_report_latest",cosmosdb.DATABASE_ID)
     #await asyncio.gather(groups_future,users_future)
     
     all_groups_d = blob_writer.read_item(blob.CONTAINER,'groups')
@@ -102,6 +103,9 @@ def main():
                     else:
                         #futures.append(writer.create_item("files_report",db_entry))
                         writer.create_item("files_report",db_entry)
+                        latest_db_entry = db_entry.copy()
+                        latest_db_entry['id'] = f"{db_entry['system']}_{db_entry['fs']}_{db_entry['user']}_{db_entry['ownership']}_{db_entry['location']}"
+                        writer.upsert_item("files_report_latest",latest_db_entry)
         
         if unknown_users:
             missing_user_data=remote_command.run_remote_cmd([f'for i in {" ".join([ str(i) for i in unknown_users ])}; do getent passwd $i; id -Gn $i; sleep 0.01; done'])
@@ -160,7 +164,10 @@ def main():
                 pass
 
             #futures.append(writer.create_item("files_report",db_entry))
-            writer.create_item("files_report",db_entry)
+            writer.create_item("files_report",entry)
+            latest_db_entry = entry.copy()
+            latest_db_entry['id'] = f"{entry['system']}_{entry['fs']}_{entry['user']}_{entry['ownership']}_{entry['location']}"
+            writer.upsert_item("files_report_latest",latest_db_entry)
     
     #await asyncio.gather(*futures)
     #await writer.close()
