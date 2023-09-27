@@ -121,10 +121,10 @@ async def main():
     for entry in entry_list:
         if 'fs' in entry:
             entry['id'] = f"{entry['system']}_massdata_{entry['project']}"
-            futures.append(writer.upsert_item('latest_storage',entry))
+            futures.append(writer.upsert_item('storage_latest',entry))
         else:
             entry['id'] = f"{entry['system']}_{entry['user']}_{entry['project']}"
-            futures.append(writer.upsert_item('latest_compute',entry))
+            futures.append(writer.upsert_item('compute_latest',entry))
 
         counter += 1
         if counter >= RATE_LIMIT:

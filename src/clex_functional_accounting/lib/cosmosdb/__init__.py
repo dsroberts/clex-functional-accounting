@@ -134,7 +134,7 @@ class CosmosDBWriter():
 
         if where:
             if isinstance(where,List):
-                q+=f" WHERE c.{' AND c.'.join(i for i in where)}"
+                q+=f" WHERE ( c.{' AND c.'.join(i for i in where)} )"
             elif isinstance(where,str):
                 q+=f" WHERE c.{where}"
             q+=f" AND c.PartitionKey = '{pkv}'"

@@ -54,8 +54,8 @@ class AccountingAPI(object):
         url_map = []
         for func in dir(self):
             if func.startswith("api_get_"):
-                url_map.append(Rule(f'/api/v0/{func.split("_")[-1]}',endpoint=func))
-                url_map.append(Rule(f'/api/v0/{func.split("_")[-1]}/<param>',endpoint=func))
+                url_map.append(Rule(f'/api/v0/{func.split("_",maxsplit=2)[-1]}',endpoint=func))
+                url_map.append(Rule(f'/api/v0/{func.split("_",maxsplit=2)[-1]}/<param>',endpoint=func))
         
         self.url_map = Map(url_map)
 
@@ -166,6 +166,60 @@ class AccountingAPI(object):
 
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
 
+    def api_get_compute_latest(self,request,param=None):
+
+        headers=STANDARD_HEADERS
+
+        db_writer = cosmosdb.CosmosDBWriter()
+        _ = db_writer.get_container("compute_latest","Accounting")
+
+        if param:
+            ### Respond to getOne (will be a little different from the usual filtered output)
+            out={ 'id':param }
+            compute_query = db_writer.query("compute_latest",where=[f"user = '{param}' OR c.project = '{param}'"])
+            if compute_query:
+                tmp = { i['user']:0.0 for i in compute_query if i['user'] not in ( 'grant','total' )} | { i['project']:0.0 for i in compute_query }
+                for line in compute_query:
+                    if line['user'] in ( 'grant','total' ): continue
+                    tmp[line['user']] = round(line['usage']+tmp[line['user']],2)
+                    tmp[line['project']] = round(line['usage']+tmp[line['project']],2)
+            else:
+                tmp = {}
+
+            return Response(json.dumps(out | dict(sorted(tmp.items(), key=lambda x: x[1], reverse=True))),content_type="application/json",headers=headers)
+
+        where_list=[]
+
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+            for k,v in filt.items():
+                ### Handle timestamps same as any other field in this case
+                ### Should never filter this db on timestamps anyway
+                #if k == "ts": continue
+                if isinstance(v,List):
+                    filt[k] = ','.join( [ "'" + i + "'" for i in v] )
+                elif isinstance(v,str):
+                    filt[k] = "'" + v + "'"
+                where_list.append(f"{k} IN ({filt[k]})")
+
+        order_str=None
+        if "sort" in request.args:
+            field,order = json.loads(request.args.get("sort"))
+            order_str = field
+            if order == "DESC":
+                order_str = order_str + " DESC"
+
+        start = None
+        total = None
+        if "range" in request.args:
+            start, end = json.loads(request.args["range"])
+            total=end-start+1
+            headers = headers | content_range_headers("compute",start,end,total)
+
+        compute_queries = db_writer.query("compute_latest",fields=None,where=where_list,order=order_str,offset=start,limit=total)
+
+        return Response(json.dumps(compute_queries),content_type="application/json",headers=headers)
+
     def api_get_compute(self,request,param=None):
 
         headers=STANDARD_HEADERS
@@ -203,7 +257,7 @@ class AccountingAPI(object):
             for k,v in filt.items():
                 ### Handle timestamps later
                 if k == "ts": continue
-                if isinstance(v,List): 
+                if isinstance(v,List):
                     filt[k] = ','.join( [ "'" + i + "'" for i in v] )
                 elif isinstance(v,str):
                     filt[k] = "'" + v + "'"
