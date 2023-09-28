@@ -16,6 +16,9 @@ STANDARD_HEADERS= {
         'Access-Control-Allow-Origin': '*'
     }
 
+SUBSTRING_MATCH_FIELDS=[ 'id', 'pw_name' ]
+INTEGER_FIELDS=[ 'uid', 'gid' ]
+
 class Datetime_with_quarter(datetime):
     def quarter(self):
         return f"{self.year}.q{(self.month-1)//3+1}"
@@ -26,6 +29,11 @@ def content_range_headers(who: str, start: int, end: int, total: int):
         'Content-Range': f"{who} {start}-{end}/{total}",
         'Access-Control-Expose-Headers': 'Content-Range'
     }
+
+def field_match(field: str, a: Union[str,int], b: Union[str,int] ) -> bool:
+    if field in SUBSTRING_MATCH_FIELDS:
+        return any( i.lower() in a.lower() for i in b )
+    return any( a == i for i in b )
 
 def filter_list(in_list: List[Dict[str,Any]],filt:Dict[str,Union[str,int,List]]):
     if not in_list:
@@ -41,7 +49,8 @@ def filter_list(in_list: List[Dict[str,Any]],filt:Dict[str,Union[str,int,List]])
             if k in [ "uid", "gid" ]: v = int(v)
             if isinstance(v,str) or isinstance(v,int): real_filt[k] = [v,]
         for l in in_list:
-            if all( l[k] in v for k,v in real_filt.items() ):
+            #if all( l[k] in v for k,v in real_filt.items() ):
+            if all( field_match(k,l[k],v) for k,v in real_filt.items() ):
                 out_list.append(l)
         return out_list
     else:
