@@ -108,6 +108,7 @@ class AccountingAPI(object):
 
         if param:
             try:
+                user_d[param]['groups'] = sorted(list(set(user_d[param]["groups"]) & set(monitored_projects)))
                 return Response(json.dumps({"id":param} | user_d[param]),content_type="application/json")
             except KeyError:
                 return Response('{}',content_type="application/json")
@@ -136,7 +137,6 @@ class AccountingAPI(object):
 
         for i in out_l:
             i["groups"] = sorted(list(set(i["groups"]) & set(monitored_projects)))
-
 
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
     
