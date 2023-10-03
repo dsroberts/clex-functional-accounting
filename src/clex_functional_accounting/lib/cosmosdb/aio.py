@@ -74,8 +74,7 @@ class CosmosDBWriter():
         if not pk:
             pk = self._get_partition_key_val(container)
 
-        ### This is a future
-        return container_client.delete_item(d,pk)
+        await container_client.delete_item(d,pk)
 
     async def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
 
