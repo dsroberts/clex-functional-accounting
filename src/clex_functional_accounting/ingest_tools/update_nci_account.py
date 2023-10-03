@@ -141,6 +141,10 @@ async def main():
     for item in await writer.query('compute_latest',where=f'ts != "{ts}"'):
         futures.append(writer.delete_item('compute_latest',item))
 
+    ### And any stale massdata entries
+    for item in await writer.query('storage_latest',where=[f'ts != "{ts}"','fs = "massdata"']):
+        futures.append(writer.delete_item('storage_latest',item))
+
     if futures:
         await asyncio.wait(futures)
     await writer.close()
