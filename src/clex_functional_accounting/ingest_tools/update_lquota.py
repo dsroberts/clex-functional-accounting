@@ -46,7 +46,9 @@ async def main():
             entries.append(entry)
             futures.append(writer.create_item("storage",entry))
 
-    await asyncio.wait(futures)
+    if futures:
+        await asyncio.wait(futures)
+
     print("Making latest entries")
 
     futures = []
@@ -55,13 +57,16 @@ async def main():
         if entry['project'] in my_groups:
             futures.append(writer.upsert_item("storage_latest",entry))
 
-    await asyncio.wait(futures)
+    if futures:
+        await asyncio.wait(futures)
     futures = []
 
     ### Finally, handle stale entries in 'storage_latest' database
     for item in await writer.query('storage_latest',where=f'ts != "{ts}"'):
         futures.append(writer.delete_item('storage_latest',item))
 
+    if futures:
+        await asyncio.wait(futures)
     await writer.close()
 
 def async_main():

@@ -173,7 +173,7 @@ def main():
     #await writer.close()
     ### Finally, handle stale entries in 'files_report_latest' database
     for item in writer.query('files_report_latest',where=f'ts != "{ts}"'):
-        writer.delete_item('storage_latest',item)
+        writer.delete_item('files_report_latest',item)
 
 
 #def async_main():
