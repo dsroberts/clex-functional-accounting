@@ -56,6 +56,12 @@ async def main():
             futures.append(writer.upsert_item("storage_latest",entry))
 
     await asyncio.wait(futures)
+    futures = []
+
+    ### Finally, handle stale entries in 'storage_latest' database
+    for item in await writer.query('storage_latest',f'c.ts != "{ts}"'):
+        futures.append(writer.delete_item(item))
+
     await writer.close()
 
 def async_main():

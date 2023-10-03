@@ -58,6 +58,23 @@ class CosmosDBWriter():
         d['PartitionKey'] = self._get_partition_key_val(container)
         await container_client.create_item(body=d)
 
+    async def delete_item(self, container: str, d: Union[Dict[str,Any],str] ) -> None:
+
+        if DRY_RUN:
+            print(f"Would have deleted: {d}")
+            return
+
+        if container not in self.container_clients:
+            raise NotImplementedError("Container client does not exist")
+
+        container_client=self.get_container(container)
+        pk = None
+        if isinstance(d,dict):
+            pk=d.get('PartitionKey',None)
+        if not pk:
+            pk = self._get_partition_key_val(container)
+        await container_client.delete_item(d,pk)
+
     async def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
 
         ### 999 times out of 1000 its going to be faster to just grab everything and do the search within

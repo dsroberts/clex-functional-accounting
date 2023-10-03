@@ -220,10 +220,13 @@ class AccountingAPI(object):
 
         start = None
         total = None
+        ### Pagination
         if "range" in request.args:
             start, end = json.loads(request.args["range"])
-            total=end-start+1
-            headers = headers | content_range_headers("compute",start,end,total)
+            total = len(out_l)
+            end=min(end,total-1)
+            out_l=out_l[start:end+1]
+            headers = headers | content_range_headers("users",start,end,total)
 
         compute_queries = db_writer.query("compute_latest",fields=None,where=where_list,order=order_str,offset=start,limit=total)
 
