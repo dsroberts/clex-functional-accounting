@@ -67,13 +67,15 @@ class CosmosDBWriter():
         if container not in self.container_clients:
             raise NotImplementedError("Container client does not exist")
 
-        container_client=self.get_container(container)
+        container_client=await self.get_container(container)
         pk = None
         if isinstance(d,dict):
             pk=d.get('PartitionKey',None)
         if not pk:
             pk = self._get_partition_key_val(container)
-        await container_client.delete_item(d,pk)
+
+        ### This is a future
+        return container_client.delete_item(d,pk)
 
     async def read_items(self, container: str, item: Any, field: Optional[str] =  None, partition_key_val: Optional[str] = None, once_off: bool = False) -> List[Dict[str,Any]]:
 
