@@ -136,8 +136,8 @@ async def main():
     futures = []
 
     ### Finally, handle stale entries 'compute_latest' database
-    for item in await writer.query('compute_latest',f'c.ts != "{ts}"'):
-        futures.append(writer.delete_item(item))
+    for item in await writer.query('compute_latest',where=f'ts != "{ts}"'):
+        futures.append(writer.delete_item('compute_latest',item))
 
     await asyncio.wait(futures)
     await writer.close()

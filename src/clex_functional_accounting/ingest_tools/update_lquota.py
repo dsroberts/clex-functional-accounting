@@ -59,8 +59,8 @@ async def main():
     futures = []
 
     ### Finally, handle stale entries in 'storage_latest' database
-    for item in await writer.query('storage_latest',f'c.ts != "{ts}"'):
-        futures.append(writer.delete_item(item))
+    for item in await writer.query('storage_latest',where=f'ts != "{ts}"'):
+        futures.append(writer.delete_item('storage_latest',item))
 
     await writer.close()
 
