@@ -218,17 +218,15 @@ class AccountingAPI(object):
             if order == "DESC":
                 order_str = order_str + " DESC"
 
-        start = None
-        total = None
+        compute_queries = db_writer.query("compute_latest",fields=None,where=where_list,order=order_str)
+
         ### Pagination
         if "range" in request.args:
             start, end = json.loads(request.args["range"])
-            total = len(out_l)
+            total = len(compute_queries)
             end=min(end,total-1)
-            out_l=out_l[start:end+1]
+            compute_queries=compute_queries[start:end+1]
             headers = headers | content_range_headers("users",start,end,total)
-
-        compute_queries = db_writer.query("compute_latest",fields=None,where=where_list,order=order_str,offset=start,limit=total)
 
         return Response(json.dumps(compute_queries),content_type="application/json",headers=headers)
 
