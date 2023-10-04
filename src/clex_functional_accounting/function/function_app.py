@@ -56,6 +56,12 @@ def filter_list(in_list: List[Dict[str,Any]],filt:Dict[str,Union[str,int,List]])
     else:
         return in_list
 
+def remove_internal_data(in_list: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
+    return [ {k:v for k,v in i.items() if not k[0] == '_' } for i in in_list ]
+
+def remove_internal_data_single(in_dict: Dict[str,Any]) -> Dict[str,Any]:
+    return {k:v for k,v in in_dict.items() if not k[0] == '_' }
+
 
 class AccountingAPI(object):
     def __init__(self,config):
@@ -195,7 +201,7 @@ class AccountingAPI(object):
             else:
                 tmp = {}
 
-            return Response(json.dumps(out | dict(sorted(tmp.items(), key=lambda x: x[1], reverse=True))),content_type="application/json",headers=headers)
+            return Response(json.dumps(remove_internal_data_single(out | dict(sorted(tmp.items(), key=lambda x: x[1], reverse=True)))),content_type="application/json",headers=headers)
 
         where_list=[]
 
@@ -228,7 +234,7 @@ class AccountingAPI(object):
             compute_queries=compute_queries[start:end+1]
             headers = headers | content_range_headers("users",start,end,total)
 
-        return Response(json.dumps(compute_queries),content_type="application/json",headers=headers)
+        return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
     def api_get_compute(self,request,param=None):
 
@@ -308,7 +314,7 @@ class AccountingAPI(object):
                         where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
             compute_queries.extend(db_writer.query("compute",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
 
-        return Response(json.dumps(compute_queries),content_type="application/json",headers=headers)
+        return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
 werkzeug_app = AccountingAPI({})
 
