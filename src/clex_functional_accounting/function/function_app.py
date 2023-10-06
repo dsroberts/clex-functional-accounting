@@ -46,7 +46,7 @@ def filter_list(in_list: List[Dict[str,Any]],filt:Dict[str,Union[str,int,List]])
         for k,v in real_filt.items():
             ### Can have a pretty small list of integer conversions given this
             ### function is only for users and groups
-            if k in [ "uid", "gid" ]: v = int(v)
+            if k in INTEGER_FIELDS: v = int(v)
             if isinstance(v,str) or isinstance(v,int): real_filt[k] = [v,]
         for l in in_list:
             #if all( l[k] in v for k,v in real_filt.items() ):
@@ -61,6 +61,11 @@ def remove_internal_data(in_list: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
 
 def remove_internal_data_single(in_dict: Dict[str,Any]) -> Dict[str,Any]:
     return {k:v for k,v in in_dict.items() if not k[0] == '_' }
+
+def sanitize_time(time: str) -> datetime:
+    if time.endswith('Z'):
+        return Datetime_with_quarter.fromisoformat(time[:-1])
+    return Datetime_with_quarter.fromisoformat(time)
 
 
 class AccountingAPI(object):
@@ -252,7 +257,7 @@ class AccountingAPI(object):
                     filt["ts"] = [ filt["ts"], ]
                 q_set = set()
                 for v in filt["ts"]:
-                    q_set.add(Datetime_with_quarter.fromisoformat(v).quarter())
+                    q_set.add(sanitize_time(v).quarter())
                 quarters = sorted(list(q_set))
             else:
                 quarters = [ Datetime_with_quarter.now().quarter(), ]
@@ -304,13 +309,13 @@ class AccountingAPI(object):
                     ### If timestamps is a string, construct a between statement
                     ### for the hours either side of those
                     if isinstance(timestamps,str):
-                        t=datetime.fromisoformat(timestamps)
+                        t=sanitize_time(timestamps)
                         where_list_w_timestamps = where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
                     elif isinstance(timestamps,List):
                         ### Handle an interval otherwise
                         timelist=sorted(timestamps)
-                        tstart = datetime.fromisoformat(timelist[0])
-                        tend = datetime.fromisoformat(timelist[-1])
+                        tstart = sanitize_time(timelist[0])
+                        tend = sanitize_time(timelist[-1])
                         where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
             compute_queries.extend(db_writer.query("compute",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
 
