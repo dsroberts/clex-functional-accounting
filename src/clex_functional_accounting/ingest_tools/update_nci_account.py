@@ -10,14 +10,14 @@ from ..lib.cosmosdb import aio as cosmosdb
 
 RATE_LIMIT=100
 
-def construct_compute_entry(user: str, val: str, ts: str, proj: str) -> Dict[str,Union[str,float]]:
+def construct_compute_entry(user: str, val: float, ts: str, proj: str) -> Dict[str,Union[str,float]]:
     return {
         'id': str(uuid.uuid4()),
         'ts': ts,
         'project': proj,
         'system': config.settings['remote_cmd_host'],
         'user': user,
-        'usage': float(val),
+        'usage': val,
     }
 
 def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
@@ -33,6 +33,8 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
     in_user_block=False
     user_start_block_seen=False
 
+    total_usage=0
+
     for line in block:
         linelist = line.split()
         if not linelist: continue
@@ -44,12 +46,16 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
                 else:
                     user_start_block_seen=True
             else:                
-                out.append(construct_compute_entry(linelist[0],linelist[1],ts,proj))
+                ### Actual usage equals reported usage minus reserved.
+                out.append(construct_compute_entry(linelist[0],float(linelist[1])-float(linelist[3]),ts,proj))
         else:
             if linelist[0] == "Grant:":
-                out.append(construct_compute_entry('grant',linelist[1],ts,proj))
+                out.append(construct_compute_entry('grant',float(linelist[1]),ts,proj))
             elif linelist[0] == "Used:":
-                out.append(construct_compute_entry('total',linelist[1],ts,proj))
+                #out.append(construct_compute_entry('total',linelist[1],ts,proj))
+                total_usage=float(linelist[1])
+            elif linelist[0] == "Reserved:":
+                out.append(construct_compute_entry('total',total_usage-float(linelist[1]),ts,proj))
             elif linelist[0] == "User":
                 in_user_block=True
             elif linelist[0] == "massdata":
