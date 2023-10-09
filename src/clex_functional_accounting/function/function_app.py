@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta
 
 import azure.functions as func
-from typing import Any, Dict, List, Tuple, Optional, Union
+from typing import Any, Dict, List, Union
 
 one_hour=timedelta(hours=1)
 
@@ -320,6 +320,61 @@ class AccountingAPI(object):
             compute_queries.extend(db_writer.query("compute",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
 
         return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
+
+    def api_get_storage_user_latest(self,request,param=None):
+
+        headers=STANDARD_HEADERS
+
+        db_writer = cosmosdb.CosmosDBWriter()
+        _ = db_writer.get_container("files_report_latest","Accounting")
+
+        #if param:
+            ### Respond to getOne (will be a little different from the usual filtered output)
+            #out={ 'id':param }
+            #compute_query = db_writer.query("files_report_latest",where=[f"user = '{param}'"])
+            #if compute_query:
+            #    tmp_size = { i['user']:0.0 for i in compute_query }
+            #    tmp_inodes = { i['user']:0.0 for i in compute_query }
+            #    for line in compute_query:
+            #        tmp_size[line['user']] = round(line['size']+tmp[line['user']],2)
+            #        tmp_inodes[line['user']] = round(line['inodes'] + tmp[line['user']],2)
+            #else:
+            #    tmp = {}
+
+            #return Response(json.dumps(remove_internal_data_single(out | dict(sorted(tmp.items(), key=lambda x: x[1], reverse=True)))),content_type="application/json",headers=headers)
+
+        where_list=[]
+
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+            for k,v in filt.items():
+                ### Handle timestamps same as any other field in this case
+                ### Should never filter this db on timestamps anyway
+                #if k == "ts": continue
+                if isinstance(v,List):
+                    filt[k] = ','.join( [ "'" + i + "'" for i in v] )
+                elif isinstance(v,str):
+                    filt[k] = "'" + v + "'"
+                where_list.append(f"{k} IN ({filt[k]})")
+
+        order_str=None
+        if "sort" in request.args:
+            field,order = json.loads(request.args.get("sort"))
+            order_str = field
+            if order == "DESC":
+                order_str = order_str + " DESC"
+
+        storage_queries = db_writer.query("files_report_latest",fields=None,where=where_list,order=order_str)
+
+        ### Pagination
+        if "range" in request.args:
+            start, end = json.loads(request.args["range"])
+            total = len(compute_queries)
+            end=min(end,total-1)
+            compute_queries=compute_queries[start:end+1]
+            headers = headers | content_range_headers("users",start,end,total)
+
+        return Response(json.dumps(remove_internal_data(storage_queries)),content_type="application/json",headers=headers)
 
 werkzeug_app = AccountingAPI({})
 
