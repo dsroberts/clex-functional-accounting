@@ -369,9 +369,9 @@ class AccountingAPI(object):
         ### Pagination
         if "range" in request.args:
             start, end = json.loads(request.args["range"])
-            total = len(compute_queries)
+            total = len(storage_queries)
             end=min(end,total-1)
-            compute_queries=compute_queries[start:end+1]
+            storage_queries=storage_queries[start:end+1]
             headers = headers | content_range_headers("users",start,end,total)
 
         return Response(json.dumps(remove_internal_data(storage_queries)),content_type="application/json",headers=headers)
