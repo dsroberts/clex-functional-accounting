@@ -322,21 +322,24 @@ class AccountingAPI(object):
 
         return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
-    def api_get_storage_user_latest(self,request,param=None):
+    def api_get_storage_latest(self,request,param=None):
 
         headers=STANDARD_HEADERS
 
         db_writer = cosmosdb.CosmosDBWriter()
         _ = db_writer.get_container("files_report_latest","Accounting")
+        _ = db_writer.get_container("storage_latest","Accounting")
 
         if param:
             ### Not necessary to support
             return self.error_400()
 
         where_list=[]
+        quota_where_list=[]
 
         if "filter" in request.args:
             filt=json.loads(request.args.get("filter"))
+            quota_filt={}
             for k,v in filt.items():
                 ### Handle timestamps same as any other field in this case
                 ### Should never filter this db on timestamps anyway
@@ -346,6 +349,12 @@ class AccountingAPI(object):
                 elif isinstance(v,str):
                     filt[k] = "'" + v + "'"
                 where_list.append(f"{k} IN ({filt[k]})")
+                if k in ( 'ownership', 'location' ):
+                    quota_filt["project"] = filt[k]
+                elif k in ( 'fs', 'system', 'PartitionKey' ):
+                    quota_filt[k] = filt[k]
+            for k,v in quota_filt.items():
+                quota_where_list.append(f"{k} IN ({quota_filt[k]})")
 
         order_str=None
         if "sort" in request.args:
@@ -354,7 +363,35 @@ class AccountingAPI(object):
             if order == "DESC":
                 order_str = order_str + " DESC"
 
+        ### Don't want totals if we're looking for a specific user
+        quota_queries=[]
         storage_queries = db_writer.query("files_report_latest",fields=None,where=where_list,order=order_str)
+        if "user" not in filt:
+            totals_queries = db_writer.query("storage_latest",fields=None,where=quota_where_list,order=order_str)
+            for i in totals_queries:
+                quota_queries.append({"ts":i["ts"], 
+                                        "id":f'{i["system"]}_{i["fs"]}_total_{i["project"]}_{i["project"]}',
+                                        "fs":i["fs"],
+                                        "user":"total",
+                                        "ownership":i["project"],
+                                        "location":i["project"],
+                                        "size":i["usage"],
+                                        "inodes":i["iusage"],
+                                        })
+                quota_queries.append({"ts":i["ts"], 
+                                        "id":f'{i["system"]}_{i["fs"]}_quota_{i["project"]}_{i["project"]}',
+                                        "fs":i["fs"],
+                                        "user":"grant",
+                                        "ownership":i["project"],
+                                        "location":i["project"],
+                                        "size":i["quota"],
+                                        "inodes":i["iquota"],
+                                        })
+
+            storage_queries = storage_queries + quota_queries
+            if order_str:
+                storage_queries = sorted(storage_queries,key=lambda x:x[order_str.split(' ')[0]],reverse=(order_str.split(' ')[1]=="DESC"))
+                print(storage_queries[0])
 
         ### Pagination
         if "range" in request.args:

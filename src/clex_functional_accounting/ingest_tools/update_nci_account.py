@@ -53,7 +53,7 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
                 out.append(construct_compute_entry('grant',float(linelist[1]),ts,proj))
             elif linelist[0] == "Used:":
                 ### Whereas in the summary actual usage equals usage.
-                out.append(construct_compute_entry('total',linelist[1],ts,proj))
+                out.append(construct_compute_entry('total',float(linelist[1]),ts,proj))
             elif linelist[0] == "User":
                 in_user_block=True
             elif linelist[0] == "massdata":
