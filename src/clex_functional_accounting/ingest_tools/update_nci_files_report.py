@@ -53,14 +53,15 @@ def main():
             except KeyError:
                 quota_types_d[kind] = [ proj, ]
         
+        unknown_users=set()
+        unknown_groups=set()
+        deferred_entries=[]
+
         for k,v in quota_types_d.items():
             if v:
                 nci_files_report_out = json.loads(remote_command.run_remote_cmd(['nci-files-report',k,' '.join(v),'--filesystem',fs,'--json'])[0])
                 for entry in nci_files_report_out:
                     defer_entry = False
-                    unknown_users=set()
-                    unknown_groups=set()
-                    deferred_entries=[]
 
                     try:
                         user = all_users[entry['uid']]
