@@ -83,7 +83,7 @@ class AccountingAPI(object):
         return Response("{'data': 'Not Found'}",404,content_type="application/json")
 
     def error_400(self):
-        return Response("{'data': 'Invalid'}",404,content_type="application/json")
+        return Response("{'data': 'Invalid'}",400,content_type="application/json")
 
     def wsgi_app(self, environ, start_response):
         request = Request(environ)
@@ -328,20 +328,9 @@ class AccountingAPI(object):
         db_writer = cosmosdb.CosmosDBWriter()
         _ = db_writer.get_container("files_report_latest","Accounting")
 
-        #if param:
-            ### Respond to getOne (will be a little different from the usual filtered output)
-            #out={ 'id':param }
-            #compute_query = db_writer.query("files_report_latest",where=[f"user = '{param}'"])
-            #if compute_query:
-            #    tmp_size = { i['user']:0.0 for i in compute_query }
-            #    tmp_inodes = { i['user']:0.0 for i in compute_query }
-            #    for line in compute_query:
-            #        tmp_size[line['user']] = round(line['size']+tmp[line['user']],2)
-            #        tmp_inodes[line['user']] = round(line['inodes'] + tmp[line['user']],2)
-            #else:
-            #    tmp = {}
-
-            #return Response(json.dumps(remove_internal_data_single(out | dict(sorted(tmp.items(), key=lambda x: x[1], reverse=True)))),content_type="application/json",headers=headers)
+        if param:
+            ### Not necessary to support
+            return self.error_400()
 
         where_list=[]
 
@@ -383,20 +372,9 @@ class AccountingAPI(object):
         db_writer = cosmosdb.CosmosDBWriter()
         _ = db_writer.get_container("storage_latest","Accounting")
 
-        #if param:
-            ### Respond to getOne (will be a little different from the usual filtered output)
-            #out={ 'id':param }
-            #compute_query = db_writer.query("files_report_latest",where=[f"user = '{param}'"])
-            #if compute_query:
-            #    tmp_size = { i['user']:0.0 for i in compute_query }
-            #    tmp_inodes = { i['user']:0.0 for i in compute_query }
-            #    for line in compute_query:
-            #        tmp_size[line['user']] = round(line['size']+tmp[line['user']],2)
-            #        tmp_inodes[line['user']] = round(line['inodes'] + tmp[line['user']],2)
-            #else:
-            #    tmp = {}
-
-            #return Response(json.dumps(remove_internal_data_single(out | dict(sorted(tmp.items(), key=lambda x: x[1], reverse=True)))),content_type="application/json",headers=headers)
+        if param:
+            ### Don't need to support
+            return self.error_400()
 
         where_list=[]
 
