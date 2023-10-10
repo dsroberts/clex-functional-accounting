@@ -155,14 +155,15 @@ class AccountingAPI(object):
 
         blob_writer = blob.BlobWriter()
         group_d = blob_writer.read_item(blob.CONTAINER,'groups')
+        monitored_projects = blob_writer.read_item(blob.CONTAINER,'projectlist')
 
         if param:
-            try:
+            if param in monitored_projects:
                 return Response(json.dumps({"id":param} | group_d[param]),content_type="application/json")
-            except KeyError:
+            else:
                 return Response('{}',content_type="application/json")
 
-        all_group_list=[ {"id":k} | v for k,v in group_d.items() ]
+        all_group_list=[ {"id":k} | v for k,v in group_d.items() if k in monitored_projects ]
         out_l=all_group_list
         headers=STANDARD_HEADERS
 
