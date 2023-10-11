@@ -353,8 +353,7 @@ class AccountingAPI(object):
                     quota_filt["project"] = filt[k]
                 elif k in ( 'fs', 'system', 'PartitionKey' ):
                     quota_filt[k] = filt[k]
-            for k,v in quota_filt.items():
-                quota_where_list.append(f"{k} IN ({quota_filt[k]})")
+            quota_where_list=[ f"{k} IN ({v})" for k,v in quota_filt.items() ]
 
         order_str=None
         if "sort" in request.args:
@@ -389,8 +388,13 @@ class AccountingAPI(object):
                                         })
 
             storage_queries = storage_queries + quota_queries
+
             if order_str:
-                storage_queries = sorted(storage_queries,key=lambda x:x[order_str.split(' ')[0]],reverse=(order_str.split(' ')[1]=="DESC"))
+                reverseSort=False
+                order_tuple = order_str.split(' ')
+                if len(order_tuple) == 2:
+                    reverseSort=(order_tuple[1] == "DESC")
+                storage_queries = sorted(storage_queries,key=lambda x:x[order_tuple[0]],reverse=reverseSort)
                 print(storage_queries[0])
 
         ### Pagination
@@ -444,6 +448,122 @@ class AccountingAPI(object):
             end=min(end,total-1)
             storage_queries=storage_queries[start:end+1]
             headers = headers | content_range_headers("users",start,end,total)
+
+        return Response(json.dumps(remove_internal_data(storage_queries)),content_type="application/json",headers=headers)
+
+    def api_get_storage(self,request,param=None):
+
+        headers=STANDARD_HEADERS
+
+        quarters=[]
+        filt={}
+        if "filter" in request.args:
+            filt=json.loads(request.args.get("filter"))
+
+        ### First up. figure out how many containers we need to grab
+        if filt:
+            if "ts" in filt:
+                if isinstance(filt["ts"],str):
+                    filt["ts"] = [ filt["ts"], ]
+                q_set = set()
+                for v in filt["ts"]:
+                    q_set.add(sanitize_time(v).quarter())
+                quarters = sorted(list(q_set))
+            else:
+                quarters = [ Datetime_with_quarter.now().quarter(), ]
+
+        else:
+            quarters = [ Datetime_with_quarter.now().quarter(), ]
+
+        db_writer = cosmosdb.CosmosDBWriter()
+        _ = db_writer.get_container("files_report","Accounting",quarterly=True)
+        _ = db_writer.get_container("storage","Accounting",quarterly=True)
+
+        if param:
+            self.error_400()
+
+        where_list=[]
+        quota_where_list=[]
+
+        if filt:
+            quota_filt={}
+            for k,v in filt.items():
+                ### Handle timestamps later
+                if k == "ts": continue
+                if isinstance(v,List):
+                    filt[k] = ','.join( [ "'" + i + "'" for i in v] )
+                elif isinstance(v,str):
+                    filt[k] = "'" + v + "'"
+                where_list.append(f"{k} IN ({filt[k]})")
+                if k in ( 'ownership', 'location' ):
+                    quota_filt["project"] = filt[k]
+                elif k in ( 'fs', 'system', 'PartitionKey' ):
+                    quota_filt[k] = filt[k]
+            quota_where_list=[ f"{k} IN ({v})" for k,v in quota_filt.items() ]
+
+        order_str=None
+        if "sort" in request.args:
+            field,order = json.loads(request.args.get("sort"))
+            order_str = field
+            if order == "DESC":
+                order_str = order_str + " DESC"
+
+        start = None
+        total = None
+        if "range" in request.args:
+            start, end = json.loads(request.args["range"])
+            total=end-start+1
+            headers = headers | content_range_headers("compute",start,end,total)
+
+        quota_queries=[]
+        storage_queries=[]
+        for q in quarters:
+            where_list_w_timestamps = where_list
+            if filt:
+                timestamps = filt.get("ts",None)
+                if timestamps:
+                    ### Quota data is daily at 2205 UTC
+                    if isinstance(timestamps,str):
+                        t=sanitize_time(timestamps)
+                        where_list_w_timestamps = where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
+                    elif isinstance(timestamps,List):
+                        ### Handle an interval otherwise
+                        timelist=sorted(timestamps)
+                        tstart = sanitize_time(timelist[0])
+                        tend = sanitize_time(timelist[-1])
+                        where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
+            storage_queries.extend(db_writer.query("files_report",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
+            if "user" not in filt:
+                ### quota/usage, on the other hand comes in at 0, 6, 12 and 18 UTC from a different table
+                totals_queries = db_writer.query("storage",fields=None,where=quota_where_list,order=order_str,quarter=q)
+                for i in totals_queries:
+                    quota_queries.append({"ts":i["ts"],
+                                        "id":f'{i["system"]}_{i["fs"]}_total_{i["project"]}_{i["project"]}',
+                                        "fs":i["fs"],
+                                        "user":"total",
+                                        "ownership":i["project"],
+                                        "location":i["project"],
+                                        "size":i["usage"],
+                                        "inodes":i["iusage"],
+                                        })
+                    quota_queries.append({"ts":i["ts"],
+                                        "id":f'{i["system"]}_{i["fs"]}_quota_{i["project"]}_{i["project"]}',
+                                        "fs":i["fs"],
+                                        "user":"grant",
+                                        "ownership":i["project"],
+                                        "location":i["project"],
+                                        "size":i["quota"],
+                                        "inodes":i["iquota"],
+                                        })
+        storage_queries = storage_queries + quota_queries
+
+        if order_str:
+            reverseSort=False
+            order_tuple = order_str.split(' ')
+            if len(order_tuple) == 2:
+                reverseSort=(order_tuple[1] == "DESC")
+
+            storage_queries = sorted(storage_queries,key=lambda x:x[order_tuple[0]],reverse=reverseSort)
 
         return Response(json.dumps(remove_internal_data(storage_queries)),content_type="application/json",headers=headers)
 
