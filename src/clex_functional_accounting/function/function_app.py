@@ -514,7 +514,6 @@ class AccountingAPI(object):
             total=end-start+1
             headers = headers | content_range_headers("compute",start,end,total)
 
-        print(filt["user"].split(','))
         do_total_query=False
         do_grant_query=False
         if "user" in filt:
