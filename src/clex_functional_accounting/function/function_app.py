@@ -514,6 +514,18 @@ class AccountingAPI(object):
             total=end-start+1
             headers = headers | content_range_headers("compute",start,end,total)
 
+        print(filt["user"].split(','))
+        do_total_query=False
+        do_grant_query=False
+        if "user" in filt:
+            if any( [i == "'total'" for i in filt["user"].split(',')] ):
+                do_total_query=True
+            if any( [i == "'quota'" for i in filt["user"].split(',')] ):
+                do_grant_query=True
+        else:
+            do_total_query=True
+            do_grant_query=True
+
         quota_queries=[]
         storage_queries=[]
         for q in quarters:
@@ -532,28 +544,30 @@ class AccountingAPI(object):
                         tend = sanitize_time(timelist[-1])
                         where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
             storage_queries.extend(db_writer.query("files_report",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
-            if "user" not in filt:
+            if do_grant_query | do_total_query:
                 ### quota/usage, on the other hand comes in at 0, 6, 12 and 18 UTC from a different table
                 totals_queries = db_writer.query("storage",fields=None,where=quota_where_list,order=order_str,quarter=q)
                 for i in totals_queries:
-                    quota_queries.append({"ts":i["ts"],
-                                        "id":f'{i["system"]}_{i["fs"]}_total_{i["project"]}_{i["project"]}',
-                                        "fs":i["fs"],
-                                        "user":"total",
-                                        "ownership":i["project"],
-                                        "location":i["project"],
-                                        "size":i["usage"],
-                                        "inodes":i["iusage"],
-                                        })
-                    quota_queries.append({"ts":i["ts"],
-                                        "id":f'{i["system"]}_{i["fs"]}_quota_{i["project"]}_{i["project"]}',
-                                        "fs":i["fs"],
-                                        "user":"grant",
-                                        "ownership":i["project"],
-                                        "location":i["project"],
-                                        "size":i["quota"],
-                                        "inodes":i["iquota"],
-                                        })
+                    if do_total_query:
+                        quota_queries.append({"ts":i["ts"],
+                                            "id":f'{i["system"]}_{i["fs"]}_total_{i["project"]}_{i["project"]}',
+                                            "fs":i["fs"],
+                                            "user":"total",
+                                            "ownership":i["project"],
+                                            "location":i["project"],
+                                            "size":i["usage"],
+                                            "inodes":i["iusage"],
+                                            })
+                    if do_grant_query:
+                        quota_queries.append({"ts":i["ts"],
+                                            "id":f'{i["system"]}_{i["fs"]}_quota_{i["project"]}_{i["project"]}',
+                                            "fs":i["fs"],
+                                            "user":"grant",
+                                            "ownership":i["project"],
+                                            "location":i["project"],
+                                            "size":i["quota"],
+                                            "inodes":i["iquota"],
+                                            })
         storage_queries = storage_queries + quota_queries
 
         if order_str:
