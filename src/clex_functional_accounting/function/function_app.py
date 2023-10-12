@@ -395,7 +395,6 @@ class AccountingAPI(object):
                 if len(order_tuple) == 2:
                     reverseSort=(order_tuple[1] == "DESC")
                 storage_queries = sorted(storage_queries,key=lambda x:x[order_tuple[0]],reverse=reverseSort)
-                print(storage_queries[0])
 
         ### Pagination
         if "range" in request.args:
