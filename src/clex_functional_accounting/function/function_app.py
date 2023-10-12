@@ -536,16 +536,18 @@ class AccountingAPI(object):
                     if isinstance(timestamps,str):
                         t=sanitize_time(timestamps)
                         where_list_w_timestamps = where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
+                        quota_where_list_w_timestamps = quota_where_list + [ f"ts > '{(t - one_hour).isoformat()}'", f"ts < '{(t + one_hour).isoformat()}'" ]
                     elif isinstance(timestamps,List):
                         ### Handle an interval otherwise
                         timelist=sorted(timestamps)
                         tstart = sanitize_time(timelist[0])
                         tend = sanitize_time(timelist[-1])
                         where_list_w_timestamps = where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
+                        quota_where_list_w_timestamps = quota_where_list + [ f"ts > '{(tstart - one_hour).isoformat()}'", f"ts < '{(tend + one_hour).isoformat()}'"]
             storage_queries.extend(db_writer.query("files_report",fields=None,where=where_list_w_timestamps,order=order_str,offset=start,limit=total,quarter=q))
             if do_grant_query | do_total_query:
                 ### quota/usage, on the other hand comes in at 0, 6, 12 and 18 UTC from a different table
-                totals_queries = db_writer.query("storage",fields=None,where=quota_where_list,order=order_str,quarter=q)
+                totals_queries = db_writer.query("storage",fields=None,where=quota_where_list_w_timestamps,order=order_str,quarter=q)
                 for i in totals_queries:
                     if do_total_query:
                         quota_queries.append({"ts":i["ts"],
