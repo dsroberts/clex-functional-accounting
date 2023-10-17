@@ -5,6 +5,10 @@ from werkzeug.routing import Map, Rule
 from werkzeug.exceptions import HTTPException, NotFound
 from clex_functional_accounting.lib import cosmosdb,blob,group_list
 import json
+import hashlib
+import os
+import uuid
+
 from datetime import datetime, timedelta
 
 import azure.functions as func
@@ -77,6 +81,7 @@ class AccountingAPI(object):
                 url_map.append(Rule(f'/api/v0/{func.split("_",maxsplit=2)[-1]}',endpoint=func))
                 url_map.append(Rule(f'/api/v0/{func.split("_",maxsplit=2)[-1]}/<param>',endpoint=func))
         
+        url_map.append(Rule(f'/api/v0/auth',endpoint="api_auth"))
         self.url_map = Map(url_map)
 
     def error_404(self):
@@ -84,6 +89,9 @@ class AccountingAPI(object):
 
     def error_400(self):
         return Response("{'data': 'Invalid'}",400,content_type="application/json")
+
+    def error_401(self):
+        return Response("{'data': 'Unauthorised'}",401,content_type="application/json")
 
     def wsgi_app(self, environ, start_response):
         request = Request(environ)
@@ -110,6 +118,26 @@ class AccountingAPI(object):
         except HTTPException as e:
             return e
         
+    def api_auth(self, request: Request):
+        d = request.get_json()
+        if "username" not in d:
+            return self.error_401()
+        if "password" not in d:
+            return self.error_401()
+
+        m = hashlib.sha3_512(d['password'].encode())
+        m.update(os.getenv('SALT',"").encode())
+        d['password'] = m.hexdigest()
+
+        blob_writer = blob.BlobWriter()
+        creds = blob_writer.read_item(blob.CONTAINER,'creds')
+        print(creds)
+        print(d['password'])
+        if d['password'] != creds:
+            return self.error_401()
+
+        return Response(json.dumps({'auth':str(uuid.uuid4())}),content_type="application/json",headers=STANDARD_HEADERS)
+
     ### This function handles getOne, getMany, getManyReference and getList
     def api_get_users(self,request: Request,param=None):
 
