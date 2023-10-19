@@ -11,6 +11,8 @@ def main():
     all_seen_users=set()
     ### Get all data from these groups
     all_group_data=remote_command.run_remote_cmd([f'for i in {" ".join(my_groups)}; do getent group $i; done'])
+    if not all_group_data:
+        exit("No data received, check subprocess status")
 
     group_d=writer.read_item(blob.CONTAINER,'groups')
     for line in all_group_data:

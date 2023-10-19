@@ -44,6 +44,8 @@ def main():
         ### project quotas
         ### Figure out some way to capture this in the db
         quota_types = remote_command.run_remote_cmd( [ f'for i in {" ".join([ i[1] + "+" + str(i[0]) for i in all_groups.items() if i[1] in my_groups])}; do if [[ -d {fs_path}/${{i%+*}} ]]; then lfs quota -p ${{i#*+}} {fs_path}/${{i%+*}} > /dev/null 2>&1 && echo ${{i%+*}} --project || echo "${{i%+*}}" "--group"; fi; done' ] )
+        if not quota_types:
+            exit("No data received, check subprocess status")
         ### Organise into quota types dict
         quota_types_d={}
         for i in quota_types:
@@ -60,6 +62,8 @@ def main():
         for k,v in quota_types_d.items():
             if v:
                 nci_files_report_out = json.loads(remote_command.run_remote_cmd(['nci-files-report',k,' '.join(v),'--filesystem',fs,'--json'])[0])
+                if not nci_files_report_out:
+                    exit("No data received, check subprocess status")
                 for entry in nci_files_report_out:
                     defer_entry = False
 

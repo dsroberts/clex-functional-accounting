@@ -13,6 +13,11 @@ async def main():
     latest_future = writer.get_container("storage_latest",cosmosdb.DATABASE_ID)
     lquota_out=remote_command.run_remote_cmd(["lquota","-q","--no-pretty-print"])
     
+    if not lquota_out:
+        await asyncio.wait([get_future,latest_future])
+        await writer.close()
+        exit("No data received, check subprocess status")
+
     ts = datetime.now().isoformat() + "Z"
     field_names=[ 'project','fs','usage','quota','limit','iusage','iquota','ilimit' ]
 

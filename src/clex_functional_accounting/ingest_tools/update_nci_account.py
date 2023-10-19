@@ -87,6 +87,10 @@ async def main():
     my_groups = group_list.get_group_list()
 
     nci_account_out = remote_command.run_remote_cmd([f'for i in {" ".join(my_groups)}; do nci_account -P $i -vvv --no-pretty-print; sleep 0.1; done'])
+    if not nci_account_out:
+        await asyncio.wait([compute_future,storage_future,compute_latest_future,storage_latest_future])
+        await writer.close()
+        exit("No data received, check subprocess status")
 
     block_start = 1
     block_end = 0
