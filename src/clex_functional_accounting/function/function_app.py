@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timedelta
 
 import azure.functions as func
+import azure.cosmos.exceptions as cosmos_exceptions
+
 from typing import Any, Dict, List, Union
 
 one_hour=timedelta(hours=1)
@@ -82,6 +84,7 @@ class AccountingAPI(object):
                 url_map.append(Rule(f'/api/v0/{func.split("_",maxsplit=2)[-1]}/<param>',endpoint=func))
         
         url_map.append(Rule(f'/api/v0/auth',endpoint="api_auth"))
+        url_map.append(Rule(f'/api/v0/checkauth',endpoint="api_checkauth"))
         self.url_map = Map(url_map)
 
     def error_404(self):
@@ -117,7 +120,17 @@ class AccountingAPI(object):
             return self.error_404()
         except HTTPException as e:
             return e
-        
+
+    def _check_auth(self,key):
+        print(key)
+        db_writer = cosmosdb.CosmosDBWriter()
+        keys = db_writer.get_container("authkeys","Accounting")
+        try:
+            keys.read_item(key,partition_key='1')
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return False
+        return True
+
     def api_auth(self, request: Request):
         d = request.get_json()
         if "username" not in d:
@@ -136,10 +149,27 @@ class AccountingAPI(object):
         if d['password'] != creds:
             return self.error_401()
 
-        return Response(json.dumps({'auth':str(uuid.uuid4())}),content_type="application/json",headers=STANDARD_HEADERS)
+        auth_key=str(uuid.uuid4())
+
+        db_writer = cosmosdb.CosmosDBWriter()
+        _ = db_writer.get_container("authkeys","Accounting")
+        #keys.create_item(body={'id':auth_key,'PartitionKey':'1'})
+        db_writer.create_item("authkeys",{'id':auth_key})
+
+        return Response(auth_key,content_type="application/json",headers=STANDARD_HEADERS)
+
+    def api_checkauth(self,request: Request):
+        if "key" not in request.args:
+            return self.error_401()
+        if self._check_auth(request.args["key"]):
+            return Response(None,status=204)
+        return self.error_401()
 
     ### This function handles getOne, getMany, getManyReference and getList
     def api_get_users(self,request: Request,param=None):
+
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
 
         blob_writer = blob.BlobWriter()
         user_d = blob_writer.read_item(blob.CONTAINER,'users')
@@ -181,6 +211,9 @@ class AccountingAPI(object):
     
     def api_get_groups(self,request: Request,param=None):
 
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
+
         blob_writer = blob.BlobWriter()
         group_d = blob_writer.read_item(blob.CONTAINER,'groups')
         monitored_projects = blob_writer.read_item(blob.CONTAINER,'projectlist')
@@ -216,6 +249,9 @@ class AccountingAPI(object):
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
 
     def api_get_compute_latest(self,request,param=None):
+
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
 
         headers=STANDARD_HEADERS
 
@@ -271,6 +307,9 @@ class AccountingAPI(object):
         return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
     def api_get_compute(self,request,param=None):
+
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
 
         headers=STANDARD_HEADERS
 
@@ -351,6 +390,9 @@ class AccountingAPI(object):
         return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
     def api_get_storage_latest(self,request,param=None):
+
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
 
         headers=STANDARD_HEADERS
 
@@ -436,6 +478,9 @@ class AccountingAPI(object):
 
     def api_get_storage_project_latest(self,request,param=None):
 
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
+
         headers=STANDARD_HEADERS
 
         db_writer = cosmosdb.CosmosDBWriter()
@@ -479,6 +524,9 @@ class AccountingAPI(object):
         return Response(json.dumps(remove_internal_data(storage_queries)),content_type="application/json",headers=headers)
 
     def api_get_storage(self,request,param=None):
+
+        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+            return self.error_401()
 
         headers=STANDARD_HEADERS
 
