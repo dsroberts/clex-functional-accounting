@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Union
 one_hour=timedelta(hours=1)
 
 STANDARD_HEADERS= {
-        'Access-Control-Allow-Origin': '*'
+        'Cache-Control': 'public'
     }
 
 SUBSTRING_MATCH_FIELDS=[ 'id', 'pw_name' ]
@@ -156,13 +156,13 @@ class AccountingAPI(object):
         #keys.create_item(body={'id':auth_key,'PartitionKey':'1'})
         db_writer.create_item("authkeys",{'id':auth_key})
 
-        return Response(auth_key,content_type="application/json",headers=STANDARD_HEADERS)
+        return Response(auth_key,content_type="application/json")
 
     def api_checkauth(self,request: Request):
         if "key" not in request.args:
             return self.error_401()
         if self._check_auth(request.args["key"]):
-            return Response(None,status=204)
+            return Response(None,status=204,headers=STANDARD_HEADERS)
         return self.error_401()
 
     ### This function handles getOne, getMany, getManyReference and getList
