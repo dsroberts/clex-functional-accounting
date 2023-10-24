@@ -122,7 +122,6 @@ class AccountingAPI(object):
             return e
 
     def _check_auth(self,key):
-        print(key)
         db_writer = cosmosdb.CosmosDBWriter()
         keys = db_writer.get_container("authkeys","Accounting")
         try:
@@ -144,8 +143,6 @@ class AccountingAPI(object):
 
         blob_writer = blob.BlobWriter()
         creds = blob_writer.read_item(blob.CONTAINER,'creds')
-        print(creds)
-        print(d['password'])
         if d['password'] != creds:
             return self.error_401()
 
@@ -178,9 +175,9 @@ class AccountingAPI(object):
         if param:
             try:
                 user_d[param]['groups'] = sorted(list(set(user_d[param]["groups"]) & set(monitored_projects)))
-                return Response(json.dumps({"id":param} | user_d[param]),content_type="application/json")
+                return Response(json.dumps({"id":param} | user_d[param]),content_type="application/json",headers=STANDARD_HEADERS)
             except KeyError:
-                return Response('{}',content_type="application/json")
+                return Response('{}',content_type="application/json",headers=STANDARD_HEADERS)
 
         all_user_list=[ {"id":k} | v for k,v in user_d.items() ]
         out_l=all_user_list
@@ -220,9 +217,9 @@ class AccountingAPI(object):
 
         if param:
             if param in monitored_projects:
-                return Response(json.dumps({"id":param} | group_d[param]),content_type="application/json")
+                return Response(json.dumps({"id":param} | group_d[param]),content_type="application/json",headers=STANDARD_HEADERS)
             else:
-                return Response('{}',content_type="application/json")
+                return Response('{}',content_type="application/json",headers=STANDARD_HEADERS)
 
         all_group_list=[ {"id":k} | v for k,v in group_d.items() if k in monitored_projects ]
         out_l=all_group_list
