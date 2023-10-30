@@ -5,6 +5,9 @@ on:
       script:
         required: true
         type: string
+      timeout:
+        required: true
+        type: number
   
 jobs:
   run:
