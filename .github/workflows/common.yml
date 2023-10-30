@@ -9,6 +9,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

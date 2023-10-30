@@ -8,4 +8,5 @@ jobs:
     uses: ./.github/workflows/common.yml
     with:
       script: update_nci_account
+      timeout: 5
     secrets: inherit

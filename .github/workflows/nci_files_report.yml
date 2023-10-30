@@ -9,4 +9,5 @@ jobs:
     uses: ./.github/workflows/common.yml
     with:
       script: update_nci_files_report
+      timeout: 30
     secrets: inherit
