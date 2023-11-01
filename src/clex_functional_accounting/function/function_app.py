@@ -114,6 +114,13 @@ class AccountingAPI(object):
         except HTTPException as e:
             return e
         
+        ### Check authentication before entering API funcitons
+        ### By convention, API functions ending in 'auth'
+        ### (api_auth and api_checkauth) do not require Authorization headers
+        if not endpoint.endswith("auth"):
+            if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
+                return self.error_401()
+
         try:
             return getattr(self,endpoint)(request,**values)
         except NotFound:
@@ -165,9 +172,6 @@ class AccountingAPI(object):
     ### This function handles getOne, getMany, getManyReference and getList
     def api_get_users(self,request: Request,param=None):
 
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
-
         blob_writer = blob.BlobWriter()
         user_d = blob_writer.read_item(blob.CONTAINER,'users')
         monitored_projects = blob_writer.read_item(blob.CONTAINER,'projectlist')
@@ -208,9 +212,6 @@ class AccountingAPI(object):
     
     def api_get_groups(self,request: Request,param=None):
 
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
-
         blob_writer = blob.BlobWriter()
         group_d = blob_writer.read_item(blob.CONTAINER,'groups')
         monitored_projects = blob_writer.read_item(blob.CONTAINER,'projectlist')
@@ -246,9 +247,6 @@ class AccountingAPI(object):
         return Response(json.dumps(out_l),content_type="application/json",headers=headers)
 
     def api_get_compute_latest(self,request,param=None):
-
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
 
         headers=STANDARD_HEADERS
 
@@ -304,9 +302,6 @@ class AccountingAPI(object):
         return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
     def api_get_compute(self,request,param=None):
-
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
 
         headers=STANDARD_HEADERS
 
@@ -387,9 +382,6 @@ class AccountingAPI(object):
         return Response(json.dumps(remove_internal_data(compute_queries)),content_type="application/json",headers=headers)
 
     def api_get_storage_latest(self,request,param=None):
-
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
 
         headers=STANDARD_HEADERS
 
@@ -475,9 +467,6 @@ class AccountingAPI(object):
 
     def api_get_storage_project_latest(self,request,param=None):
 
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
-
         headers=STANDARD_HEADERS
 
         db_writer = cosmosdb.CosmosDBWriter()
@@ -521,9 +510,6 @@ class AccountingAPI(object):
         return Response(json.dumps(remove_internal_data(storage_queries)),content_type="application/json",headers=headers)
 
     def api_get_storage(self,request,param=None):
-
-        if 'Authorization' not in request.headers or ( not self._check_auth(request.headers['Authorization']) ):
-            return self.error_401()
 
         headers=STANDARD_HEADERS
 
