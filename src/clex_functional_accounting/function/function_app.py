@@ -17,6 +17,7 @@ import azure.cosmos.exceptions as cosmos_exceptions
 from typing import Any, Dict, List, Union
 
 one_hour=timedelta(hours=1)
+four_weeks=timedelta(weeks=4)
 
 STANDARD_HEADERS= {
         'Cache-Control': 'public'
@@ -314,11 +315,16 @@ class AccountingAPI(object):
         if filt:
             if "ts" in filt:
                 if isinstance(filt["ts"],str):
-                    filt["ts"] = [ filt["ts"], ]
-                q_set = set()
-                for v in filt["ts"]:
-                    q_set.add(sanitize_time(v).quarter())
-                quarters = sorted(list(q_set))
+                    quarters = [ sanitize_time(filt["ts"]).quarter(), ]
+                else:
+                    t_bounds = [ sanitize_time(v) for v in filt["ts"] ]
+                    t_set = { i.quarter() for i in t_bounds }
+                    ### Are we spanning 3 or more quarters?
+                    i_t = min(t_bounds) + timedelta(weeks=4)
+                    while i_t < max(t_bounds):
+                        t_set.add(i_t.quarter())
+                        i_t = i_t + four_weeks
+                quarters = sorted(list(t_set))
             else:
                 quarters = [ Datetime_with_quarter.now().quarter(), ]
 
@@ -522,11 +528,16 @@ class AccountingAPI(object):
         if filt:
             if "ts" in filt:
                 if isinstance(filt["ts"],str):
-                    filt["ts"] = [ filt["ts"], ]
-                q_set = set()
-                for v in filt["ts"]:
-                    q_set.add(sanitize_time(v).quarter())
-                quarters = sorted(list(q_set))
+                    quarters = [ sanitize_time(filt["ts"]).quarter(), ]
+                else:
+                    t_bounds = [ sanitize_time(v) for v in filt["ts"] ]
+                    t_set = { i.quarter() for i in t_bounds }
+                    ### Are we spanning 3 or more quarters?
+                    i_t = min(t_bounds) + timedelta(weeks=4)
+                    while i_t < max(t_bounds):
+                        t_set.add(i_t.quarter())
+                        i_t = i_t + four_weeks
+                quarters = sorted(list(t_set))
             else:
                 quarters = [ Datetime_with_quarter.now().quarter(), ]
 
