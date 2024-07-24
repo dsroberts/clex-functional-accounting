@@ -47,7 +47,11 @@ def parse_block(block: List[str],ts: str) -> List[Dict[str,Union[str,float]]]:
                     user_start_block_seen=True
             else:                
                 ### Actual usage equals reported usage minus reserved.
-                out.append(construct_compute_entry(linelist[0],float(linelist[1])-float(linelist[3]),ts,proj))
+                ### Unless we're in the 'Cloud' seciton - then it's just usage
+                if len(linelist) == 3:
+                    out.append(construct_compute_entry(linelist[0],float(linelist[1]),ts,proj))
+                else:
+                    out.append(construct_compute_entry(linelist[0],float(linelist[1])-float(linelist[3]),ts,proj))
         else:
             if linelist[0] == "Grant:":
                 out.append(construct_compute_entry('grant',float(linelist[1]),ts,proj))

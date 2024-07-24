@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Setup ssh
         run: |
           mkdir -p ~/.ssh
@@ -33,7 +33,7 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
       - name: Install self
